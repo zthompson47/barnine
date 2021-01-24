@@ -20,15 +20,17 @@ use swayipc_async::{
     WindowEvent,
 };
 
-static BATTERY_UEVENT: &str = "/sys/class/power_supply/BAT0/uevent";
+const BATTERY_UEVENT: &str = "/sys/class/power_supply/BAT0/uevent";
+const LOG_FILE: &str = "log.txt";
 
 fn main() {
-    smol::block_on(async_log("log.txt", main_loop()));
+    smol::block_on(async_log(LOG_FILE, main_loop()));
 }
 
 async fn main_loop() {
-    debug!("started main loop");
+    debug!("start main loop");
 
+    // Send header
     let header = Header {
         version: Version::One,
         stop_signal: None,
@@ -36,14 +38,17 @@ async fn main_loop() {
         click_events: None,
     };
     println!("{}", serde_json::to_string(&header).unwrap());
+
+    // Begin infinite array of updates
     println!("[");
 
+    // Spawn workers
     let (tx, rx) = channel::unbounded();
-
-    smol::spawn(process_sway_events(tx.clone())).detach();
+    smol::spawn(get_sway(tx.clone())).detach();
     smol::spawn(get_batt(tx.clone())).detach();
     smol::spawn(get_time(tx.clone())).detach();
 
+    // Update display
     Display {
         battery_status: None,
         battery_capacity: None,
@@ -56,14 +61,12 @@ async fn main_loop() {
 }
 
 #[derive(Debug)]
-enum Section {
-    #[allow(dead_code)]
+enum Update {
     BatteryStatus(String),
-    #[allow(dead_code)]
     BatteryCapacity(String),
     WindowName(String),
-    #[allow(dead_code)]
     Time(String),
+    Redraw,
 }
 
 struct Display {
@@ -71,19 +74,19 @@ struct Display {
     battery_capacity: Option<String>,
     window_name: Option<String>,
     time: Option<String>,
-    rx: channel::Receiver<Section>,
+    rx: channel::Receiver<Update>,
 }
 
 impl Display {
     async fn run(&mut self) {
         while let Ok(section) = self.rx.recv().await {
             match section {
-                Section::BatteryStatus(val) => self.battery_status = Some(val),
-                Section::BatteryCapacity(val) => self.battery_capacity = Some(val),
-                Section::WindowName(val) => self.window_name = Some(val),
-                Section::Time(val) => self.time = Some(val),
+                Update::BatteryStatus(val) => self.battery_status = Some(val),
+                Update::BatteryCapacity(val) => self.battery_capacity = Some(val),
+                Update::WindowName(val) => self.window_name = Some(val),
+                Update::Time(val) => self.time = Some(val),
+                Update::Redraw => self.redraw(),
             };
-            self.redraw();
         }
     }
 
@@ -128,18 +131,34 @@ impl Display {
     }
 }
 
-async fn get_time(tx: channel::Sender<Section>) {
+async fn _get_volume(_tx: channel::Sender<Update>) {
+    loop {
+    }
+}
+
+async fn _get_brightness(_tx: channel::Sender<Update>) {
+    loop {
+    }
+}
+
+async fn _get_network(_tx: channel::Sender<Update>) {
+    loop {
+    }
+}
+
+async fn get_time(tx: channel::Sender<Update>) {
     loop {
         let now: DateTime<Local> = Local::now();
         let fmt_now = now.format("%b %d %A %l:%M:%S %p").to_string();
-        tx.send(Section::Time(fmt_now))
+        tx.send(Update::Time(fmt_now))
             .await
             .unwrap();
+        tx.send(Update::Redraw).await.unwrap();
         sleep(Duration::from_secs(1)).await;
     }
 }
 
-async fn get_batt(tx: channel::Sender<Section>) -> io::Result<()> {
+async fn get_batt(tx: channel::Sender<Update>) -> io::Result<()> {
     loop {
         let file = fs::File::open(BATTERY_UEVENT)?;
         let reader = BufReader::new(file);
@@ -155,19 +174,21 @@ async fn get_batt(tx: channel::Sender<Section>) -> io::Result<()> {
         let bs = data.get("POWER_SUPPLY_STATUS").unwrap().to_string();
         let bc = data.get("POWER_SUPPLY_CAPACITY").unwrap().to_string();
 
-        tx.send(Section::BatteryStatus(bs))
+        tx.send(Update::BatteryStatus(bs))
             .await
             .unwrap();
 
-        tx.send(Section::BatteryCapacity(bc))
+        tx.send(Update::BatteryCapacity(bc))
             .await
             .unwrap();
+
+        tx.send(Update::Redraw).await.unwrap();
 
         sleep(Duration::from_secs(5)).await;
     }
 }
 
-async fn process_sway_events(tx: channel::Sender<Section>) -> Fallible<()> {
+async fn get_sway(tx: channel::Sender<Update>) -> Fallible<()> {
     let subs = [
         EventType::Window,
     ];
@@ -184,9 +205,10 @@ async fn process_sway_events(tx: channel::Sender<Section>) -> Fallible<()> {
                         },
                         ..
                     } => {
-                        tx.send(Section::WindowName(window_name.unwrap()))
+                        tx.send(Update::WindowName(window_name.unwrap()))
                             .await
                             .unwrap();
+                        tx.send(Update::Redraw).await.unwrap();
                     },
                     _ => {}
                 }
