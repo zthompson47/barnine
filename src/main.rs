@@ -1,15 +1,18 @@
-use allotropic::async_log;
+use std::{
+    collections::HashMap,
+    fs::{File, remove_file},
+    io::{self, prelude::*, BufReader, Error},
+    str::from_utf8,
+    time::Duration,
+};
+
 use async_std::task::sleep;
 use chrono::prelude::*;
 use log::debug;
-use smol::{self, channel, stream::StreamExt};
-use std::{
-    collections::HashMap,
-    fs,
-    io::{self, prelude::*, BufReader},
-    time::Duration,
-};
-use swaybar_types::{Align, Block, Header, Version};
+use smol::{prelude::*, block_on, channel, spawn};
+use smol::net::unix::UnixListener;
+use smol::stream::StreamExt;
+use swaybar_types::{Header, Version};
 use swayipc_async::{
     Connection,
     Event,
@@ -20,13 +23,15 @@ use swayipc_async::{
     WindowEvent,
 };
 
+use allotropic::async_log;
+use barnine::{Display, Update, backlight::{brightness_down, brightness_up}};
+
 const BATTERY_UEVENT: &str = "/sys/class/power_supply/BAT0/uevent";
-const BRIGHTNESS_MAX: &str = "/sys/class/backlight/intel_backlight/max_brightness";
-const BRIGHTNESS: &str = "/sys/class/backlight/intel_backlight/brightness";
 const LOG_FILE: &str = "log.txt";
+const RPC_SOCK: &str = "/home/zach/barnine.sock";
 
 fn main() {
-    smol::block_on(async_log(LOG_FILE, run()));
+    block_on(async_log(LOG_FILE, run()));
 }
 
 async fn run() {
@@ -47,9 +52,9 @@ async fn run() {
     // Spawn workers
     let (tx, rx) = channel::unbounded();
     smol::spawn(get_battery(tx.clone())).detach();
-    smol::spawn(get_brightness(tx.clone())).detach();
     smol::spawn(get_sway(tx.clone())).detach();
     smol::spawn(get_time(tx.clone())).detach();
+    smol::spawn(get_rpc(tx.clone())).detach();
 
     // Update display
     Display {
@@ -60,115 +65,37 @@ async fn run() {
     unreachable!();
 }
 
-#[derive(Debug)]
-enum Update {
-    BatteryStatus(String),
-    BatteryCapacity(String),
-    Brightness(f32),
-    WindowName(String),
-    Time(String),
-    Redraw,
-}
+async fn get_rpc(_tx: channel::Sender<Update>) -> Result<(), Error> {
+    let _ = remove_file(RPC_SOCK);
+    let listener = UnixListener::bind(RPC_SOCK)?;
+    let mut incoming = listener.incoming();
 
-#[derive(Default)]
-struct Display {
-    battery_status: Option<String>,
-    battery_capacity: Option<String>,
-    brightness: Option<f32>,
-    window_name: Option<String>,
-    time: Option<String>,
-    rx: Option<channel::Receiver<Update>>,
-}
-
-impl Display {
-    async fn run(&mut self) {
-        while let Ok(section) = self.rx.as_ref().unwrap().recv().await {
-            match section {
-                Update::BatteryStatus(val) => self.battery_status = Some(val),
-                Update::BatteryCapacity(val) => self.battery_capacity = Some(val),
-                Update::Brightness(_val) => self.brightness = None, // Some(val),
-                Update::WindowName(val) => self.window_name = Some(val),
-                Update::Time(val) => self.time = Some(val),
-                Update::Redraw => self.redraw(),
-            };
+    while let Some(stream) = incoming.next().await {
+        match stream {
+            Ok(mut stream) => {
+                spawn(async move {
+                    let mut buf = vec![0u8; 64];
+                    if let Ok(len) = stream.read(&mut buf).await {
+                        if let Ok(msg) = from_utf8(&buf[0..len]) {
+                            match msg {
+                                "brightness_up" => brightness_up().await.unwrap(),
+                                "brightness_down" => brightness_down().await.unwrap(),
+                                _ => debug!("bad cmd[{}]: >{:?}<", len, msg),
+                            }
+                        }
+                    }
+                }).detach();
+            },
+            Err(err) => {
+                debug!("got err: {:?}", err);
+            },
         }
     }
-
-    fn redraw(&self) {
-        print!("[");
-
-        if self.battery_status.is_some() {
-            let block = Block {
-                full_text: String::from(self.battery_status.as_ref().unwrap()),
-                background: Some("#880000".to_string()),
-                separator_block_width: Some(0),
-                ..Block::default()
-            };
-            print!("{},", serde_json::to_string(&block).unwrap());
-        }
-
-        if self.battery_capacity.is_some() {
-            let block = Block {
-                full_text: String::from(self.battery_capacity.as_ref().unwrap()),
-                background: Some("#990000".to_string()),
-                ..Block::default()
-            };
-            print!("{},", serde_json::to_string(&block).unwrap());
-        }
-
-        if self.brightness.is_some() {
-            let block = Block {
-                full_text: String::from(format!("{:2.0}", self.brightness.as_ref().unwrap())),
-                background: Some("#004400".to_string()),
-                ..Block::default()
-            };
-            print!("{},", serde_json::to_string(&block).unwrap());
-        }
-
-        if self.window_name.is_some() {
-            let block = Block {
-                align: Some(Align::Center),
-                full_text: String::from(self.window_name.as_ref().unwrap()),
-                background: Some("#000000".to_string()),
-                min_width: Some(1500),
-                ..Block::default()
-            };
-            print!("{},", serde_json::to_string(&block).unwrap());
-        }
-
-        if self.time.is_some() {
-            let block = Block {
-                align: Some(Align::Right),
-                full_text: String::from(self.time.as_ref().unwrap()),
-                ..Block::default()
-            };
-            print!("{},", serde_json::to_string(&block).unwrap());
-        }
-
-        println!("],");
-    }
+    Ok(())
 }
 
 async fn _get_volume(_tx: channel::Sender<Update>) {
     loop {
-    }
-}
-
-async fn get_brightness(tx: channel::Sender<Update>) -> io::Result<()> {
-    let brt_max = fs::read_to_string(BRIGHTNESS_MAX)?;
-    let brt_max = brt_max.trim();
-    debug!("brt_max: {:?}", brt_max);
-    loop {
-        let brt = fs::read_to_string(BRIGHTNESS)?;
-        let brt = brt.trim();
-        debug!("brt: {:?}", brt);
-        let b = brt.parse::<f32>().unwrap();
-        let m = brt_max.parse::<f32>().unwrap();
-        debug!("b/m: {:?}/{:?}", b, m);
-        let percent = (b / m) * 100f32;
-        debug!("percent: {:?}", percent);
-        tx.send(Update::Brightness(percent)).await.unwrap();
-        sleep(Duration::from_secs(5)).await;
     }
 }
 
@@ -191,7 +118,7 @@ async fn get_time(tx: channel::Sender<Update>) {
 
 async fn get_battery(tx: channel::Sender<Update>) -> io::Result<()> {
     loop {
-        let file = fs::File::open(BATTERY_UEVENT)?;
+        let file = File::open(BATTERY_UEVENT)?;
         let reader = BufReader::new(file);
 
         let mut data: HashMap<String, String> = HashMap::new();
@@ -213,7 +140,9 @@ async fn get_battery(tx: channel::Sender<Update>) -> io::Result<()> {
             .await
             .unwrap();
 
-        tx.send(Update::Redraw).await.unwrap();
+        tx.send(Update::Redraw)
+            .await
+            .unwrap();
 
         sleep(Duration::from_secs(5)).await;
     }
