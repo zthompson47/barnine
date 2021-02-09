@@ -1,0 +1,109 @@
+use smol::channel::Receiver;
+use swaybar_types::{Align, Block};
+
+#[derive(Debug)]
+pub enum Update {
+    BatteryCapacity(Option<String>),
+    BatteryStatus(Option<String>),
+    Brightness(Option<u32>),
+    Redraw,
+    Time(Option<String>),
+    Volume(Option<u32>),
+    WindowName(Option<String>),
+}
+
+#[derive(Default)]
+pub struct Display {
+    pub battery_status: Option<String>,
+    pub battery_capacity: Option<String>,
+    pub brightness: Option<u32>,
+    pub window_name: Option<String>,
+    pub time: Option<String>,
+    pub volume: Option<u32>,
+    pub rx: Option<Receiver<Update>>,
+}
+
+impl Display {
+    pub async fn run(&mut self) {
+        while let Ok(section) = self.rx.as_ref().unwrap().recv().await {
+            match section {
+                Update::BatteryStatus(val) => self.battery_status = val,
+                Update::BatteryCapacity(val) => self.battery_capacity = val,
+                Update::Brightness(val) => self.brightness = val,
+                Update::WindowName(val) => self.window_name = val,
+                Update::Time(val) => self.time = val,
+                Update::Volume(val) => self.volume = val,
+                Update::Redraw => self.redraw(),
+            };
+        }
+    }
+
+    fn redraw(&self) {
+        print!("[");
+
+        if self.brightness.is_some() {
+            let block = Block {
+                full_text: String::from(format!("{:2.0}", self.brightness.as_ref().unwrap())),
+                background: Some("#004400".to_string()),
+                ..Block::default()
+            };
+            print!("{},", serde_json::to_string(&block).unwrap());
+        }
+
+        if self.battery_status.is_some() {
+            let block = Block {
+                full_text: String::from(self.battery_status.as_ref().unwrap()),
+                background: Some("#880000".to_string()),
+                separator_block_width: Some(0),
+                ..Block::default()
+            };
+            print!("{},", serde_json::to_string(&block).unwrap());
+        }
+
+        if self.battery_capacity.is_some() {
+            let block = Block {
+                full_text: String::from(self.battery_capacity.as_ref().unwrap()),
+                background: Some("#990000".to_string()),
+                ..Block::default()
+            };
+            print!("{},", serde_json::to_string(&block).unwrap());
+        }
+
+        if self.window_name.is_some() {
+            let block = Block {
+                align: Some(Align::Center),
+                full_text: String::from(self.window_name.as_ref().unwrap()),
+                background: Some("#000000".to_string()),
+                min_width: Some(1500),
+                ..Block::default()
+            };
+            print!("{},", serde_json::to_string(&block).unwrap());
+        }
+
+
+
+        if self.volume.is_some() {
+            let block = Block {
+                align: Some(Align::Center),
+                full_text: self.volume.as_ref().unwrap().to_string(),
+                background: Some("#000000".to_string()),
+                ..Block::default()
+            };
+            print!("{},", serde_json::to_string(&block).unwrap());
+        }
+
+
+
+
+        if self.time.is_some() {
+            let block = Block {
+                align: Some(Align::Right),
+                full_text: String::from(self.time.as_ref().unwrap()),
+                ..Block::default()
+            };
+            print!("{},", serde_json::to_string(&block).unwrap());
+        }
+
+        println!("],");
+    }
+}
