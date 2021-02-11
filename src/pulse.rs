@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use async_std::task::sleep;
 use log::debug;
-use smol::channel::Sender;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::time::sleep;
 use zbus::{azync::Connection, Result};
 use zbus_macros::dbus_proxy;
 use zvariant::ObjectPath;
@@ -10,10 +10,10 @@ use zvariant::ObjectPath;
 use crate::bar::Update;
 use crate::err::Res;
 
-pub async fn get_pulse(tx: Sender<Update>) -> Res<()> {
+pub async fn get_pulse(tx: UnboundedSender<Update>) -> Res<()> {
     loop {
-        tx.send(Update::Volume(volume().await.ok())).await?;
-        tx.send(Update::Redraw).await?;
+        tx.send(Update::Volume(volume().await.ok()))?;
+        tx.send(Update::Redraw)?;
         sleep(Duration::from_secs(5)).await;
     }
 }
@@ -103,10 +103,7 @@ pub async fn pulse_info() -> Vec<String> {
         result.push(format!("name: {}", s.name().await.unwrap()));
 
         let vol = s.volume().await.unwrap();
-        let vol: Vec<u32> = vol
-            .iter()
-            .map(|x| x * 100 / 65536)
-            .collect();
+        let vol: Vec<u32> = vol.iter().map(|x| x * 100 / 65536).collect();
         result.push(format!("volume: {:?}", vol));
 
         let sf = s.sample_format().await.unwrap();
@@ -226,7 +223,7 @@ trait PulseCore {
 
 #[dbus_proxy(
     interface = "org.PulseAudio.Core1.Device",
-    default_service = "org.PulseAudio.Core1.Device",
+    default_service = "org.PulseAudio.Core1.Device"
 )]
 trait Sink {
     #[dbus_proxy(property)]

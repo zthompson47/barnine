@@ -9,16 +9,17 @@ use swayipc_async::{
 };
 
 use log::debug;
-use smol::channel::Sender;
-use smol::stream::StreamExt;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio_stream::StreamExt;
 
 use crate::bar::Update;
 
-pub async fn get_sway(tx: Sender<Update>) -> Fallible<()> {
+pub async fn get_sway(tx: UnboundedSender<Update>) -> Fallible<()> {
     let subs = [
         EventType::Window,
     ];
     let mut events = Connection::new().await?.subscribe(&subs).await?;
+
     while let Some(event) = events.next().await {
         match event? {
             Event::Window(window_event) => {
@@ -39,12 +40,8 @@ pub async fn get_sway(tx: Sender<Update>) -> Fallible<()> {
                         },
                         ..
                     } => {
-                        tx.send(Update::WindowName(Some(window_name.unwrap())))
-                            .await
-                            .unwrap();
-                        tx.send(Update::Redraw)
-                            .await
-                            .unwrap();
+                        tx.send(Update::WindowName(Some(window_name.unwrap()))).unwrap();
+                        tx.send(Update::Redraw).unwrap();
                     },
 
                     _ => {

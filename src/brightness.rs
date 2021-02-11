@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use smol::fs::read_to_string;
+use tokio::fs::read_to_string;
 use zbus::azync::Connection as Dbus;
 
 use crate::err::Error;
@@ -77,23 +77,3 @@ async fn cur_brt_with_max(device_type: &str, device: &str) -> (u32, u32) {
 
     (brt, brt_max)
 }
-
-/*
-use std::io;
-use std::time::Duration;
-
-pub async fn _get_brightness(tx: Sender<Update>) -> io::Result<()> {
-    let brt_max = smol::fs::read_to_string(BRIGHTNESS_MAX).await?;
-    let brt_max = brt_max.trim();
-    debug!("brt_max: {:?}", brt_max);
-    loop {
-        let brt = smol::fs::read_to_string(BRIGHTNESS).await?;
-        let brt = brt.trim();
-        let b = brt.parse::<f32>().unwrap();
-        let m = brt_max.parse::<f32>().unwrap();
-        let percent = (b / m) * 100f32;
-        tx.send(Update::Brightness(Some(percent))).await.unwrap();
-        sleep(Duration::from_secs(5)).await;
-    }
-}
-*/

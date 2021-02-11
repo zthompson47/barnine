@@ -1,5 +1,5 @@
-use smol::channel::Receiver;
 use swaybar_types::{Align, Block};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 #[derive(Debug)]
 pub enum Update {
@@ -20,12 +20,12 @@ pub struct Display {
     pub window_name: Option<String>,
     pub time: Option<String>,
     pub volume: Option<u32>,
-    pub rx: Option<Receiver<Update>>,
+    pub rx: Option<UnboundedReceiver<Update>>,
 }
 
 impl Display {
     pub async fn run(&mut self) {
-        while let Ok(section) = self.rx.as_ref().unwrap().recv().await {
+        while let Some(section) = self.rx.as_mut().unwrap().recv().await {
             match section {
                 Update::BatteryStatus(val) => self.battery_status = val,
                 Update::BatteryCapacity(val) => self.battery_capacity = val,

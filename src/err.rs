@@ -1,3 +1,5 @@
+use tokio::sync::mpsc::error::SendError;
+
 use crate::bar::Update;
 
 pub type Res<T> = Result<T, Error>;
@@ -5,7 +7,7 @@ pub type Res<T> = Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     AppError(String),
-    AsyncIoError(async_std::channel::SendError<Update>),
+    TokioError(SendError<Update>),
     IoError(std::io::Error),
     DbusError(zbus::Error),
     DbusMessageError(zbus::MessageError),
@@ -41,8 +43,9 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<async_std::channel::SendError<Update>> for Error {
-    fn from(error: async_std::channel::SendError<Update>) -> Self {
-        Error::AsyncIoError(error)
+
+impl From<SendError<Update>> for Error {
+    fn from(error: SendError<Update>) -> Self {
+        Error::TokioError(error)
     }
 }

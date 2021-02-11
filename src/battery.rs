@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use async_std::task::sleep;
-use smol::channel;
-use smol::fs::read_to_string;
+use tokio::fs::read_to_string;
+use tokio::time::sleep;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::err::Res;
 use crate::bar::Update;
@@ -15,7 +15,7 @@ pub struct Battery {
     pub capacity: Option<String>,
 }
 
-pub async fn get_battery(tx: channel::Sender<Update>) -> Res<()> {
+pub async fn get_battery(tx: UnboundedSender<Update>) -> Res<()> {
     loop {
         let file = read_to_string(BATTERY_UEVENT).await?;
         let mut battery = Battery::default();
@@ -29,9 +29,9 @@ pub async fn get_battery(tx: channel::Sender<Update>) -> Res<()> {
             }
         }
 
-        tx.send(Update::BatteryStatus(battery.status)).await?;
-        tx.send(Update::BatteryCapacity(battery.capacity)).await?;
-        tx.send(Update::Redraw).await?;
+        tx.send(Update::BatteryStatus(battery.status))?;
+        tx.send(Update::BatteryCapacity(battery.capacity))?;
+        tx.send(Update::Redraw)?;
 
         sleep(Duration::from_secs(5)).await;
     }

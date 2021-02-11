@@ -1,25 +1,25 @@
 use std::time::Duration;
 
-use async_std::task::sleep;
 use chrono::prelude::*;
-use log::debug;
-use smol::{block_on, channel};
 use swaybar_types::{Header, Version};
+use tokio::spawn;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::time::sleep;
+use tracing::{debug, instrument};
 
-use allotropic::async_log;
-use barnine::bar::{Display, Update};
-use barnine::battery::get_battery;
-use barnine::err::Res;
-use barnine::pulse::get_pulse;
-use barnine::rpc::get_rpc;
-use barnine::sway::get_sway;
+use barnine::{
+    bar::{Display, Update},
+    battery::get_battery,
+    err::Res,
+    logging::init_logging,
+    pulse::get_pulse,
+    rpc::get_rpc,
+    sway::get_sway,
+};
 
-fn main() {
-    block_on(async_log("log.txt", run()));
-}
-
-async fn run() {
-    debug!("starting barnine");
+#[tokio::main]
+async fn main() {
+    let _guard = init_logging("barnine.log");
 
     let header = Header {
         version: Version::One,
@@ -33,12 +33,12 @@ async fn run() {
     println!("[");
 
     // Spawn workers
-    let (tx, rx) = channel::unbounded();
-    smol::spawn(get_battery(tx.clone())).detach();
-    smol::spawn(get_sway(tx.clone())).detach();
-    smol::spawn(get_time(tx.clone())).detach();
-    smol::spawn(get_rpc(tx.clone())).detach();
-    smol::spawn(get_pulse(tx.clone())).detach();
+    let (tx, rx) = unbounded_channel();
+    spawn(get_battery(tx.clone()));
+    spawn(get_sway(tx.clone()));
+    spawn(get_time(tx.clone()));
+    spawn(get_rpc(tx.clone()));
+    spawn(get_pulse(tx.clone()));
 
     // Update display
     Display {
@@ -51,13 +51,20 @@ async fn run() {
     unreachable!();
 }
 
-async fn get_time(tx: channel::Sender<Update>) -> Res<()> {
+#[instrument]
+async fn get_time(tx: UnboundedSender<Update>) -> Res<()> {
+    debug!("START get_time");
     let time_format = "%b %d %A %l:%M:%S %p";
     loop {
+        debug!("LOOP get_time");
         let now: DateTime<Local> = Local::now();
         let fmt_now = now.format(time_format).to_string();
-        tx.send(Update::Time(Some(fmt_now))).await?;
-        tx.send(Update::Redraw).await?;
+        debug!("LOOP 222222222222233");
+        tx.send(Update::Time(Some(fmt_now)))?;
+        debug!("LOOP 333333333333333");
+        tx.send(Update::Redraw)?;
+        debug!("LOOP BEFORE sleep");
         sleep(Duration::from_secs(1)).await;
+        debug!("LOOP AFTER sleep");
     }
 }
