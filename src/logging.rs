@@ -1,27 +1,29 @@
+use std::env;
 use std::fmt::{Error, Write};
 use std::path::Path;
 
 use crossterm::style::Colorize;
+use log::info;
 use tracing::subscriber::Subscriber;
-use tracing::{info, Event, Level};
+use tracing::{Event, Level};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling;
-use tracing_log::{LogTracer, NormalizeEvent};
+use tracing_log::NormalizeEvent;
 use tracing_subscriber::fmt::time::{ChronoLocal, FormatTime};
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
 use tracing_subscriber::registry::LookupSpan;
 
-pub fn init_logging(log_file: &str) -> WorkerGuard {
+pub fn init_logging(app_name: &str) -> WorkerGuard {
     let default_level = Level::INFO;
-    let log_file = Path::new(log_file);
-    let log_dir = log_file.parent().unwrap();
-    let file_name = log_file.file_name().unwrap();
+    let log_dir = get_log_dir(app_name);
+    let mut file_name = app_name.to_string();
+    file_name.push_str(".log");
 
     let file_appender = rolling::never(log_dir, file_name);
     let (log_writer, guard) = tracing_appender::non_blocking(file_appender);
 
-    tracing_subscriber::fmt()
-        .with_max_level(match std::env::var("RUST_LOG") {
+    match tracing_subscriber::fmt()
+        .with_max_level(match env::var("RUST_LOG") {
             Ok(level) => match level.as_str() {
                 "info" | "INFO" => Level::INFO,
                 "warn" | "WARN" => Level::WARN,
@@ -35,17 +37,24 @@ pub fn init_logging(log_file: &str) -> WorkerGuard {
         .with_writer(log_writer)
         .event_format(SimpleFmt)
         .try_init()
-        .unwrap();
-    info!("Starting barnine...");
-
-    match LogTracer::init() {
-        Ok(_) => (),
-        Err(err) => {
-            info!("{}", err.to_string())
-        },
+    {
+        Ok(_) => info!("Starting barnine..."),
+        Err(e) => eprintln!("{}", e.to_string()),
     }
 
     guard
+}
+
+fn get_log_dir(app_name: &str) -> Box<Path> {
+    let result = match env::var("XDG_CACHE_DIR") {
+        Ok(dir) => Path::new(&dir).join(app_name),
+        Err(_) => match env::var("HOME") {
+            Ok(dir) => Path::new(&dir).join(".cache").join(app_name),
+            Err(_) => Path::new("/tmp").join(app_name),
+        },
+    };
+
+    result.into_boxed_path()
 }
 
 struct SimpleFmt;
@@ -61,6 +70,7 @@ where
         writer: &mut dyn Write,
         event: &Event<'_>,
     ) -> Result<(), Error> {
+        // Create timestamp
         let time_format = "%b %d %I:%M:%S%.6f %p";
         let mut time_now = String::new();
         ChronoLocal::with_format(time_format.into()).format_time(&mut time_now)?;
@@ -69,6 +79,7 @@ where
         let normalized_meta = event.normalized_metadata();
         let meta = normalized_meta.as_ref().unwrap_or_else(|| event.metadata());
 
+        // Write formatted log record
         let message = format!(
             "{}{} {}{}{} ",
             time_now.grey(),
@@ -80,5 +91,59 @@ where
         write!(writer, "{}", message).unwrap();
         ctx.format_fields(writer, event)?;
         writeln!(writer)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, io::prelude::*, io::BufReader, path::Path};
+
+    use log;
+    use tempfile::tempdir;
+    use tracing;
+
+    use super::{get_log_dir, init_logging};
+
+    #[test]
+    fn generate_log_records() {
+        // Use tempdir for log files
+        let dir = tempdir().unwrap().into_path();
+        std::env::set_var("XDG_CACHE_DIR", &dir);
+        let _guard = init_logging("barnine-test");
+
+        // Try both logging crates
+        log::info!("test log INFO");
+        tracing::debug!("test tracing DEBUG");
+
+        // Confirm log file created
+        let dir = dir.join("barnine-test");
+        assert!(dir.is_dir());
+        let log_file = dir.join("barnine-test.log");
+        assert!(log_file.is_file());
+
+        // Check log records
+        let file = fs::File::open(&log_file).unwrap();
+        let buf_reader = BufReader::new(file);
+        let log_records: Vec<String> = buf_reader.lines().map(|x| x.unwrap()).collect();
+        assert!(log_records.len() >= 2);
+        let idx = log_records.len() - 2;
+        println!(">!>{}<!<", log_records[idx]);
+        assert!(log_records[idx].contains("test log INFO"));
+        println!(">!>{}<!<", log_records[idx + 1]);
+        assert!(log_records[idx + 1].ends_with("test tracing DEBUG"));
+    }
+
+    #[test]
+    fn change_log_dir_location() {
+        std::env::remove_var("XDG_CACHE_DIR");
+        std::env::remove_var("HOME");
+        assert_eq!(Path::new("/tmp/test"), &*get_log_dir("test"));
+
+        std::env::set_var("XDG_CACHE_DIR", "/foo");
+        assert_eq!(Path::new("/foo/test"), &*get_log_dir("test"));
+
+        std::env::remove_var("XDG_CACHE_DIR");
+        std::env::set_var("HOME", "/bar");
+        assert_eq!(Path::new("/bar/.cache/test"), &*get_log_dir("test"));
     }
 }

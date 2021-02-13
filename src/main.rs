@@ -19,7 +19,7 @@ use barnine::{
 
 #[tokio::main]
 async fn main() {
-    let _guard = init_logging("barnine.log");
+    let _guard = init_logging("barnine");
 
     let header = Header {
         version: Version::One,
@@ -56,15 +56,11 @@ async fn get_time(tx: UnboundedSender<Update>) -> Res<()> {
     debug!("START get_time");
     let time_format = "%b %d %A %l:%M:%S %p";
     loop {
-        debug!("LOOP get_time");
         let now: DateTime<Local> = Local::now();
         let fmt_now = now.format(time_format).to_string();
-        debug!("LOOP 222222222222233");
+
         tx.send(Update::Time(Some(fmt_now)))?;
-        debug!("LOOP 333333333333333");
         tx.send(Update::Redraw)?;
-        debug!("LOOP BEFORE sleep");
         sleep(Duration::from_secs(1)).await;
-        debug!("LOOP AFTER sleep");
     }
 }

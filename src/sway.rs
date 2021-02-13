@@ -44,6 +44,11 @@ pub async fn get_sway(tx: UnboundedSender<Update>) -> Fallible<()> {
                         tx.send(Update::Redraw).unwrap();
                     },
 
+                    WindowEvent {
+                        change: WindowChange::FullscreenMode,
+                        ..
+                    } => {},
+
                     _ => {
                         debug!("-in->>{:?}", window_event);
                     }

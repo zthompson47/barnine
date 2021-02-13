@@ -18,16 +18,22 @@ use crate::{
     volume::{volume, Volume},
 };
 
-pub fn socket_path() -> PathBuf {
+pub fn socket_path(app_name: &str) -> PathBuf {
     //! Initialize unix socket in system runtime dir
     let runtime_dir = var("XDG_RUNTIME_DIR").unwrap_or(String::from("/tmp"));
-    Path::new(&runtime_dir).join("barnine.sock")
+    let mut file_name = app_name.to_string();
+    file_name.push_str(".sock");
+    Path::new(&runtime_dir).join(app_name).join(file_name)
 }
 
 pub async fn get_rpc(tx: mpsc::UnboundedSender<Update>) -> err::Res<()> {
-    let sock = socket_path();
+    debug!("Starting get_rpc");
+    let sock = socket_path("barnine");
+    debug!("Using sock:{:?}", sock);
     let _ = remove_file(&sock);
-    let listener = UnixListener::bind(&sock)?;
+    debug!("Removed sock file");
+    let listener = UnixListener::bind(&sock)?; // BOOM!!
+    debug!("Bound listener");
 
     loop {
         match listener.accept().await {

@@ -45,20 +45,14 @@ pub async fn set_volume(vol: u32) -> Res<()> {
 }
 
 pub async fn volume() -> Res<u32> {
-    debug!("()()))(()))>> enter volume()");
     let pulse_conn = new_pulse_connection().await?;
-    debug!("()()))(()))>> got pulse conn");
 
     let core_proxy = AsyncPulseCoreProxy::new(&pulse_conn)?;
-    debug!("()()))(()))>> got core_proxy");
     let sinks = core_proxy.sinks().await?;
-    debug!("()()))(()))>> got sinks");
 
     for sink in sinks.iter().map(|s| s.to_string()) {
         let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink).unwrap();
-        debug!("()()))(()))>> got sink proxy");
         let vol = sink_proxy.volume().await.unwrap();
-        debug!("()()))(()))>> got volume {:?}", vol);
         /*
         let vol: Vec<u32> = vol
             .iter()

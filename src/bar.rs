@@ -1,4 +1,4 @@
-use swaybar_types::{Align, Block};
+use swaybar_types::{Align, Block, MinWidth};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 #[derive(Debug)]
@@ -45,6 +45,7 @@ impl Display {
             let block = Block {
                 full_text: String::from(format!("{:2.0}", self.brightness.as_ref().unwrap())),
                 background: Some("#004400".to_string()),
+                min_width: Some(MinWidth::Pixels(200)),
                 ..Block::default()
             };
             print!("{},", serde_json::to_string(&block).unwrap());
@@ -70,11 +71,17 @@ impl Display {
         }
 
         if self.window_name.is_some() {
+            let window_name = String::from(self.window_name.as_ref().unwrap());
+            let mut short_window_name = window_name.clone();
+            short_window_name.truncate(80);
+            let short_window_name = format!("{}...", short_window_name);
             let block = Block {
                 align: Some(Align::Center),
-                full_text: String::from(self.window_name.as_ref().unwrap()),
+                full_text: window_name,
+                short_text: Some(short_window_name),
                 background: Some("#000000".to_string()),
-                min_width: Some(1500),
+                // min_width: Some(MinWidth::Percent(100)),
+                min_width: Some(MinWidth::Pixels(1300)),
                 ..Block::default()
             };
             print!("{},", serde_json::to_string(&block).unwrap());
