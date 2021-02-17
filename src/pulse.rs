@@ -30,7 +30,7 @@ pub async fn set_volume(vol: u32) -> Res<()> {
 
     for sink in sinks.iter().map(|s| s.to_string()) {
         debug!("<>--> in sink");
-        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink).unwrap();
+        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
         let mut new_volume = Vec::new();
         new_volume.push(vol);
         debug!("<>--> SET_new volume:{:?}", new_volume);
@@ -51,8 +51,8 @@ pub async fn volume() -> Res<u32> {
     let sinks = core_proxy.sinks().await?;
 
     for sink in sinks.iter().map(|s| s.to_string()) {
-        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink).unwrap();
-        let vol = sink_proxy.volume().await.unwrap();
+        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
+        let vol = sink_proxy.volume().await?;
         /*
         let vol: Vec<u32> = vol
             .iter()
@@ -248,7 +248,6 @@ trait Sink {
     fn has_hardware_volume(&self) -> Result<bool>;
     #[dbus_proxy(property)]
     fn has_hardware_mute(&self) -> Result<bool>;
-
     #[dbus_proxy(property)]
     fn set_volume(&self, vols: Vec<u32>) -> Result<()>;
 }

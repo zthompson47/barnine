@@ -96,7 +96,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::prelude::*, io::BufReader, path::Path};
+    use std::{env, fs, io::prelude::*, io::BufReader, path::Path};
 
     use log;
     use tempfile::tempdir;
@@ -108,7 +108,7 @@ mod tests {
     fn generate_log_records() {
         // Use tempdir for log files
         let dir = tempdir().unwrap().into_path();
-        std::env::set_var("XDG_CACHE_DIR", &dir);
+        env::set_var("XDG_CACHE_DIR", &dir);
         let _guard = init_logging("barnine-test");
 
         // Try both logging crates
@@ -127,23 +127,21 @@ mod tests {
         let log_records: Vec<String> = buf_reader.lines().map(|x| x.unwrap()).collect();
         assert!(log_records.len() >= 2);
         let idx = log_records.len() - 2;
-        println!(">!>{}<!<", log_records[idx]);
         assert!(log_records[idx].contains("test log INFO"));
-        println!(">!>{}<!<", log_records[idx + 1]);
         assert!(log_records[idx + 1].ends_with("test tracing DEBUG"));
     }
 
     #[test]
     fn change_log_dir_location() {
-        std::env::remove_var("XDG_CACHE_DIR");
-        std::env::remove_var("HOME");
+        env::remove_var("XDG_CACHE_DIR");
+        env::remove_var("HOME");
         assert_eq!(Path::new("/tmp/test"), &*get_log_dir("test"));
 
-        std::env::set_var("XDG_CACHE_DIR", "/foo");
+        env::set_var("XDG_CACHE_DIR", "/foo");
         assert_eq!(Path::new("/foo/test"), &*get_log_dir("test"));
 
-        std::env::remove_var("XDG_CACHE_DIR");
-        std::env::set_var("HOME", "/bar");
+        env::remove_var("XDG_CACHE_DIR");
+        env::set_var("HOME", "/bar");
         assert_eq!(Path::new("/bar/.cache/test"), &*get_log_dir("test"));
     }
 }

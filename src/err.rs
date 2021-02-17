@@ -7,14 +7,17 @@ pub type Res<T> = Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     AppError(String),
-    TokioError(SendError<Update>),
-    IoError(std::io::Error),
     DbusError(zbus::Error),
     DbusMessageError(zbus::MessageError),
+    FmtError(std::fmt::Error),
+    IoError(std::io::Error),
+    StdNumError(std::num::ParseIntError),
+    SwayipcError(swayipc_async::Error),
+    TokioError(SendError<Update>),
 }
 
 impl From<&str> for Error {
-    fn from (error: &str) -> Self {
+    fn from(error: &str) -> Self {
         Error::AppError(error.to_string())
     }
 }
@@ -43,9 +46,26 @@ impl From<std::io::Error> for Error {
     }
 }
 
+impl From<std::fmt::Error> for Error {
+    fn from(error: std::fmt::Error) -> Self {
+        Error::FmtError(error)
+    }
+}
 
 impl From<SendError<Update>> for Error {
     fn from(error: SendError<Update>) -> Self {
         Error::TokioError(error)
+    }
+}
+
+impl From<std::num::ParseIntError> for Error {
+    fn from(error: std::num::ParseIntError) -> Self {
+        Error::StdNumError(error)
+    }
+}
+
+impl From<swayipc_async::Error> for Error {
+    fn from(error: swayipc_async::Error) -> Self {
+        Error::SwayipcError(error)
     }
 }

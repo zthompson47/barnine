@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use tokio::fs::read_to_string;
-use tokio::time::sleep;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::time::sleep;
 
-use crate::err::Res;
 use crate::bar::Update;
+use crate::err::Res;
 
 const BATTERY_UEVENT: &str = "/sys/class/power_supply/BAT0/uevent";
 

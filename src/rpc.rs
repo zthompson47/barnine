@@ -1,20 +1,20 @@
 use std::env::var;
-use std::fs::remove_file;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::from_utf8;
 
-use log::debug;
 use tokio::io::AsyncReadExt;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::spawn;
 use tokio::sync::mpsc;
+use tracing::{debug, info, trace};
 
 use crate::{
     bar::Update,
     brightness::brighten,
     brightness::Brightness::{Keyboard, Screen},
     brightness::Delta::{DownPct, UpPct},
-    err,
+    err::Res,
     volume::{volume, Volume},
 };
 
@@ -26,33 +26,31 @@ pub fn socket_path(app_name: &str) -> PathBuf {
     Path::new(&runtime_dir).join(app_name).join(file_name)
 }
 
-pub async fn get_rpc(tx: mpsc::UnboundedSender<Update>) -> err::Res<()> {
-    debug!("Starting get_rpc");
+pub async fn get_rpc(tx: mpsc::UnboundedSender<Update>) -> Res<()> {
+    trace!("Starting get_rpc");
     let sock = socket_path("barnine");
-    debug!("Using sock:{:?}", sock);
-    let _ = remove_file(&sock);
-    debug!("Removed sock file");
-    let listener = UnixListener::bind(&sock)?; // BOOM!!
-    debug!("Bound listener");
+    let _ = fs::remove_file(&sock);
+    if let Some(base_dir) = sock.parent() {
+        fs::create_dir_all(base_dir)?;
+    }
+    let listener = UnixListener::bind(&sock)?;
 
     loop {
         match listener.accept().await {
-            Ok((stream, _addr)) => {
+            Ok((stream, addr)) => {
+                info!("Received rpc connection from {:?}", addr);
                 spawn(handle_connection(stream, tx.clone()));
             }
             Err(_) => {}
         }
     }
-
 }
 
-async fn handle_connection(
-    mut stream: UnixStream,
-    tx: mpsc::UnboundedSender<Update>,
-) -> err::Res<()> {
+async fn handle_connection(mut stream: UnixStream, tx: mpsc::UnboundedSender<Update>) -> Res<()> {
     let mut buf = vec![0u8; 64];
     if let Ok(len) = stream.read(&mut buf).await {
         if let Ok(msg) = from_utf8(&buf[0..len]) {
+            // Brightness commands
             let brightness_delta = match msg {
                 "brightness_up" => Some(Screen(UpPct(5))),
                 "brightness_down" => Some(Screen(DownPct(5))),
@@ -66,6 +64,7 @@ async fn handle_connection(
                 tx.send(Update::Redraw)?;
             }
 
+            // Volume commands
             let volume_delta = match msg {
                 "volume_up" => Some(Volume::Speakers(UpPct(2))),
                 "volume_down" => Some(Volume::Speakers(DownPct(2))),
@@ -77,10 +76,68 @@ async fn handle_connection(
                         tx.send(Update::Volume(Some(new_vol)))?;
                         tx.send(Update::Redraw)?;
                     }
-                    Err(err) => debug!("{:?}", err),
+                    Err(err) => {
+                        debug!("{:?}", err);
+                    }
                 }
             }
         }
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+    use tokio::{
+        io::AsyncWriteExt,
+        net::UnixStream,
+        sync::mpsc,
+        time::{sleep, Duration},
+    };
+
+    use super::{get_rpc, socket_path};
+    use crate::bar::Update;
+
+    #[tokio::test]
+    async fn run_rpc_socket() {
+        // Construct expected socket path
+        let app_name = "barnine";
+        let dir = tempdir().unwrap().into_path();
+        let mut sock_path = dir.join(app_name).join(app_name);
+        sock_path.set_extension("sock");
+
+        // Check against actual socket path
+        std::env::set_var("XDG_RUNTIME_DIR", &dir);
+        assert_eq!(sock_path, socket_path(app_name));
+
+        // Start rpc listener task
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        tokio::spawn(get_rpc(tx));
+
+        // Yield for rpc task to start and create socket
+        sleep(Duration::from_secs(0)).await;
+        assert!(sock_path.exists());
+
+        // Send a command
+        let mut conn = UnixStream::connect(sock_path).await.unwrap();
+        conn.write_all("volume_down".as_bytes()).await.unwrap();
+
+        // Read the command
+        let mut got_it = false;
+        if let Some(command) = rx.recv().await {
+            match command {
+                Update::Volume(Some(_)) => got_it = true,
+                _ => {}
+            }
+        }
+        assert!(got_it);
+    }
+
+    #[test]
+    fn fallback_socket_in_tmp() {
+        std::env::remove_var("XDG_RUNTIME_DIR");
+        assert!(socket_path("foo").starts_with("/tmp"));
+    }
+}
+
