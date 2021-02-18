@@ -6,4 +6,6 @@ pub mod logging;
 pub mod pulse;
 pub mod rpc;
 pub mod sway;
+#[cfg(test)]
+mod tests;
 pub mod volume;

@@ -37,8 +37,7 @@ pub async fn get_rpc(tx: mpsc::UnboundedSender<Update>) -> Res<()> {
 
     loop {
         match listener.accept().await {
-            Ok((stream, addr)) => {
-                info!("Received rpc connection from {:?}", addr);
+            Ok((stream, _addr)) => {
                 spawn(handle_connection(stream, tx.clone()));
             }
             Err(_) => {}
@@ -140,4 +139,3 @@ mod tests {
         assert!(socket_path("foo").starts_with("/tmp"));
     }
 }
-

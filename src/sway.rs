@@ -1,4 +1,6 @@
-use swayipc_async::{Connection, Event, EventType, Node, WindowChange, WindowEvent};
+use swayipc_async::{
+    Connection, Event, EventType, Node, WindowChange, WindowEvent, WorkspaceChange, WorkspaceEvent,
+};
 
 use log::debug;
 use tokio::sync::mpsc::UnboundedSender;
@@ -6,9 +8,10 @@ use tokio_stream::StreamExt;
 
 use crate::bar::Update;
 use crate::err::Res;
+use crate::brightness::{brighten, Brightness::Screen, Delta::{DownPct, UpPct}};
 
 pub async fn get_sway(tx: UnboundedSender<Update>) -> Res<()> {
-    let subs = [EventType::Window];
+    let subs = [EventType::Window, EventType::Workspace];
     let mut events = Connection::new().await?.subscribe(&subs).await?;
 
     while let Some(event) = events.next().await {
@@ -30,10 +33,10 @@ pub async fn get_sway(tx: UnboundedSender<Update>) -> Res<()> {
                         },
                     ..
                 } => {
+                    // Get current window name
                     if !window_name.is_some() {
                         debug!("Window change with None window_name");
                     }
-                    debug!("CHGNE WINDO title:{:?}", window_name);
                     tx.send(Update::WindowName(Some(window_name.unwrap())))?;
                     tx.send(Update::Redraw)?;
                 }
@@ -47,17 +50,62 @@ pub async fn get_sway(tx: UnboundedSender<Update>) -> Res<()> {
                     debug!("-in->>{:?}", window_event);
                 }
             },
-            _ => {
-                debug!("-out->>");
-            }
+
+            Event::Workspace(workspace_event) => match *workspace_event {
+                WorkspaceEvent {
+                    change: WorkspaceChange::Focus,
+                    current: Some(Node { nodes: ref cur_nodes, .. }),
+                    old: Some(Node { nodes: ref old_nodes, .. }),
+                    ..
+                } => {
+                    if contains_firefox(cur_nodes) {
+                        let new_val = brighten(Screen(DownPct(22))).await?;
+                        tx.send(Update::Brightness(Some(new_val)))?;
+                        tx.send(Update::Redraw)?;
+                    } else if contains_firefox(old_nodes) {
+                        let new_val = brighten(Screen(UpPct(22))).await?;
+                        tx.send(Update::Brightness(Some(new_val)))?;
+                        tx.send(Update::Redraw)?;
+                    }
+                }
+                _ => {}
+            },
+
+            _ => {}
         }
     }
     Ok(())
 }
 
+fn contains_firefox(nodes: &[Node]) -> bool {
+    for node in nodes {
+        match node {
+            Node {
+                app_id: Some(app_id),
+                ..
+            } => {
+                if app_id.starts_with("firefox") {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
+    use super::contains_firefox;
     use crate::bar::{Display, MAX_WINDOW_NAME_LENGTH};
+    use crate::tests;
+
+    #[test]
+    fn identify_firefox_node() {
+        let node = tests::mock_firefox_node();
+        assert!(contains_firefox(&[node]));
+    }
 
     #[test]
     #[should_panic]

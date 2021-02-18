@@ -5,7 +5,7 @@ use swaybar_types::{Header, Version};
 use tokio::spawn;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::time::{self, Duration};
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, error, instrument, trace};
 
 use barnine::{
     bar::{Display, Update},
@@ -50,9 +50,8 @@ async fn main() {
         }
     });
 
-    let mut display = Display::default();
     let (tx_display, mut rx_display) = unbounded_channel();
-    display.set_tx_redraw(tx_display);
+    let mut display = Display::new(tx_display);
 
     // Process worker update messages
     tokio::spawn(async move {

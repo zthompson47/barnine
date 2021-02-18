@@ -50,9 +50,16 @@ impl Display {
         }
     }
 
-    pub fn set_tx_redraw(&mut self, tx: mpsc::UnboundedSender<String>) {
-        self.tx_redraw = Some(tx);
+    pub fn new(tx: mpsc::UnboundedSender<String>) -> Self {
+        Display {
+            tx_redraw: Some(tx),
+            ..Display::default()
+        }
     }
+
+    //pub fn set_tx_redraw(&mut self, tx: mpsc::UnboundedSender<String>) {
+    //    self.tx_redraw = Some(tx);
+    //}
 
     pub fn to_json(&self) -> Res<String> {
         let mut result = Vec::<String>::new();
@@ -170,8 +177,7 @@ mod tests {
     #[tokio::test]
     async fn json_from_updates() {
         let (tx_dr, mut rx_dr) = unbounded_channel::<String>();
-        let mut d = Display::default();
-        d.set_tx_redraw(tx_dr);
+        let mut d = Display::new(tx_dr);
 
         let (tx_up, mut rx_up) = unbounded_channel::<Update>();
         tokio::spawn(async move {
