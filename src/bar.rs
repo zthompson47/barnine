@@ -28,6 +28,13 @@ pub struct Display {
 }
 
 impl Display {
+    pub fn new(tx: mpsc::UnboundedSender<String>) -> Self {
+        Display {
+            tx_redraw: Some(tx),
+            ..Display::default()
+        }
+    }
+
     pub fn update(&mut self, command: Update) {
         match command {
             Update::BatteryCapacity(val) => self.battery_capacity = val,
@@ -49,17 +56,6 @@ impl Display {
                 .unwrap();
         }
     }
-
-    pub fn new(tx: mpsc::UnboundedSender<String>) -> Self {
-        Display {
-            tx_redraw: Some(tx),
-            ..Display::default()
-        }
-    }
-
-    //pub fn set_tx_redraw(&mut self, tx: mpsc::UnboundedSender<String>) {
-    //    self.tx_redraw = Some(tx);
-    //}
 
     pub fn to_json(&self) -> Res<String> {
         let mut result = Vec::<String>::new();
