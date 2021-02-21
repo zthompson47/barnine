@@ -98,7 +98,7 @@ fn contains_firefox(nodes: &[Node]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::contains_firefox;
-    use crate::bar::{Display, MAX_WINDOW_NAME_LENGTH};
+    use crate::bar::{Bar, MAX_WINDOW_NAME_LENGTH};
     use crate::tests;
 
     #[test]
@@ -119,7 +119,7 @@ mod tests {
     fn window_name_with_char_boundary() {
         let utf8_3_bytes = "ท";
         let test_str = utf8_3_bytes.repeat(MAX_WINDOW_NAME_LENGTH + 1);
-        let mut display = Display::default();
+        let mut display = Bar::default();
         display.window_name = Some(String::from(test_str));
 
         // Force truncation on a char boundary

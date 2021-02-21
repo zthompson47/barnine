@@ -121,12 +121,23 @@ mod tests {
         let log_file = dir.join("barnine-test.log");
         assert!(log_file.is_file());
 
+        // Drop logging guard to flush logs.
+        // TODO test it??  failure below was intermittent
+        //   hmm still dropping records after this drop..
+        drop(_guard);
+
         // Check log records
         let file = fs::File::open(&log_file).unwrap();
         let buf_reader = BufReader::new(file);
         let log_records: Vec<String> = buf_reader.lines().map(|x| x.unwrap()).collect();
         assert!(log_records.len() >= 2);
         let idx = log_records.len() - 2;
+
+        if !log_records[idx].contains("test log INFO") {
+            // TODO - Log records are occasionally dropped... ??
+            println!("{}", fs::read_to_string(&log_file).unwrap());
+        }
+
         assert!(log_records[idx].contains("test log INFO"));
         assert!(log_records[idx + 1].ends_with("test tracing DEBUG"));
     }

@@ -7,7 +7,7 @@ use tokio::io::AsyncReadExt;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::spawn;
 use tokio::sync::mpsc;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 use crate::{
     bar::Update,
@@ -115,6 +115,8 @@ mod tests {
         tokio::spawn(get_rpc(tx));
 
         // Yield for rpc task to start and create socket
+        // TODO test fails intermittently..  needs sync on socket file creation
+        sleep(Duration::from_secs(0)).await;
         sleep(Duration::from_secs(0)).await;
         assert!(sock_path.exists());
 

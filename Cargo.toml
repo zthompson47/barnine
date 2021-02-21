@@ -7,6 +7,7 @@ default-run = "barnine"
 
 [dependencies]
 allotropic = { path = "../allotropic" }
+async-trait = "0.1.42"
 chrono = "0.4.19"
 crossterm = "0.19.0"
 futures = "0.3.12"

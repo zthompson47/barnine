@@ -16,22 +16,22 @@ pub enum Update {
     WindowName(Option<String>),
 }
 
-#[derive(Default)]
-pub struct Display {
+#[derive(Debug, Default)]
+pub struct Bar {
     pub battery_status: Option<String>,
     pub battery_capacity: Option<String>,
     pub brightness: Option<u32>,
     pub window_name: Option<String>,
     pub time: Option<String>,
     pub volume: Option<u32>,
-    tx_redraw: Option<mpsc::UnboundedSender<String>>,
+    output_tx: Option<mpsc::UnboundedSender<String>>,
 }
 
-impl Display {
+impl Bar {
     pub fn new(tx: mpsc::UnboundedSender<String>) -> Self {
-        Display {
-            tx_redraw: Some(tx),
-            ..Display::default()
+        Bar {
+            output_tx: Some(tx),
+            ..Bar::default()
         }
     }
 
@@ -48,12 +48,9 @@ impl Display {
     }
 
     fn redraw(&self) {
-        if self.tx_redraw.is_some() {
-            self.tx_redraw
-                .as_ref()
-                .unwrap()
-                .send(self.to_json().unwrap())
-                .unwrap();
+        if self.output_tx.is_some() {
+            let json = self.to_json().unwrap();
+            self.output_tx.as_ref().unwrap().send(json).unwrap();
         }
     }
 
@@ -71,22 +68,22 @@ impl Display {
         }
 
         if self.battery_status.is_some() {
-            let block = Block {
-                full_text: String::from(self.battery_status.as_ref().unwrap()),
+            let block_status = Block {
+                full_text: self.battery_status.as_ref().unwrap().to_string(),
                 background: Some("#880000".to_string()),
                 separator_block_width: Some(0),
                 ..Block::default()
             };
-            result.push(serde_json::to_string(&block).unwrap());
+            result.push(serde_json::to_string(&block_status).unwrap());
         }
 
         if self.battery_capacity.is_some() {
-            let block = Block {
-                full_text: String::from(self.battery_capacity.as_ref().unwrap()),
+            let block_capacity = Block {
+                full_text: self.battery_capacity.as_ref().unwrap().to_string(),
                 background: Some("#990000".to_string()),
                 ..Block::default()
             };
-            result.push(serde_json::to_string(&block).unwrap());
+            result.push(serde_json::to_string(&block_capacity).unwrap());
         }
 
         if self.window_name.is_some() {
@@ -97,7 +94,7 @@ impl Display {
 
             let short_window_name = format!("{}...", short_window_name);
             let block = Block {
-                align: Some(Align::Center),
+                align: Some(Align::Left),
                 full_text: window_name,
                 short_text: Some(short_window_name),
                 background: Some("#000000".to_string()),
@@ -138,11 +135,11 @@ mod tests {
     use swaybar_types::Block;
     use tokio::sync::mpsc::unbounded_channel;
 
-    use super::{Display, Update};
+    use super::{Bar, Update};
 
     #[test]
     fn json_output_empty() {
-        let d = Display::default();
+        let d = Bar::default();
         let j = d.to_json().unwrap();
 
         assert_eq!("[]", j.as_str());
@@ -150,14 +147,14 @@ mod tests {
 
     #[test]
     fn json_output_full() -> Result<()> {
-        let d = Display {
+        let d = Bar {
             battery_status: Some("Full".into()),
             battery_capacity: Some("99".into()),
             brightness: Some(1_000),
             window_name: Some("Window".into()),
             time: Some("12:01".into()),
             volume: Some(22_000),
-            tx_redraw: None,
+            output_tx: None,
         };
         let j = d.to_json().unwrap();
         assert!(j.len() > 2);
@@ -173,7 +170,7 @@ mod tests {
     #[tokio::test]
     async fn json_from_updates() {
         let (tx_dr, mut rx_dr) = unbounded_channel::<String>();
-        let mut d = Display::new(tx_dr);
+        let mut d = Bar::new(tx_dr);
 
         let (tx_up, mut rx_up) = unbounded_channel::<Update>();
         tokio::spawn(async move {
@@ -182,18 +179,15 @@ mod tests {
             }
         });
         tx_up.send(Update::Time(Some("12:01".into()))).unwrap();
-        tx_up
-            .send(Update::BatteryStatus(Some("Full".into())))
-            .unwrap();
-        tx_up
-            .send(Update::BatteryCapacity(Some("88".into())))
-            .unwrap();
+        tx_up.send(Update::BatteryStatus(Some("Full".into()))).unwrap();
+        tx_up.send(Update::BatteryCapacity(Some("88".into()))).unwrap();
         tx_up.send(Update::Redraw).unwrap();
 
         let mut got_there = false;
         while let Some(json) = rx_dr.recv().await {
             got_there = true;
             let output: Vec<Block> = serde_json::from_str(&json).unwrap();
+            println!("{:?}", output);
             assert_eq!(3, output.len());
             assert_eq!("Full", output[0].full_text);
             assert_eq!("88", output[1].full_text);
