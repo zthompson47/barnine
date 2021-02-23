@@ -10,41 +10,65 @@ use zvariant::ObjectPath;
 use crate::bar::Update;
 use crate::err::Res;
 
-pub async fn get_pulse(tx: UnboundedSender<Update>) -> Res<()> {
+pub async fn watch_pulse(tx: UnboundedSender<Update>) -> Res<()> {
     loop {
-        tx.send(Update::Volume(volume().await.ok()))?;
+        tx.send(Update::Volume(get_volume().await.ok()))?;
+        tx.send(Update::Mute(get_mute().await.ok()))?;
         tx.send(Update::Redraw)?;
         sleep(Duration::from_secs(5)).await;
     }
 }
 
 pub async fn set_volume(vol: u32) -> Res<()> {
-    debug!("<>--> enter set_volume, vol:{}", vol);
     let pulse_conn = new_pulse_connection().await?;
-    debug!("<>--> got pulse conn");
 
     let core_proxy = AsyncPulseCoreProxy::new(&pulse_conn)?;
-    debug!("<>--> got pulse core_proxy");
     let sinks = core_proxy.sinks().await?;
-    debug!("<>--> got pulse sinks");
 
     for sink in sinks.iter().map(|s| s.to_string()) {
-        debug!("<>--> in sink");
         let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
         let mut new_volume = Vec::new();
         new_volume.push(vol);
-        debug!("<>--> SET_new volume:{:?}", new_volume);
         match sink_proxy.set_volume(new_volume).await {
             Ok(val) => debug!("Ok: {:?}", val),
             Err(err) => debug!("Err: {:?}", err),
         }
-
-        debug!("<>--> after set_volume______");
     }
+
     Ok(())
 }
 
-pub async fn volume() -> Res<u32> {
+pub async fn toggle_mute() -> Res<()> {
+    let pulse_conn = new_pulse_connection().await?;
+
+    let core_proxy = AsyncPulseCoreProxy::new(&pulse_conn)?;
+    let sinks = core_proxy.sinks().await?;
+
+    for sink in sinks.iter().map(|s| s.to_string()) {
+        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
+        match sink_proxy.set_mute(!sink_proxy.mute().await.unwrap()).await {
+            Ok(val) => debug!("Ok: {:?}", val),
+            Err(err) => debug!("Err: {:?}", err),
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn get_mute() -> Res<bool> {
+    let pulse_conn = new_pulse_connection().await?;
+
+    let core_proxy = AsyncPulseCoreProxy::new(&pulse_conn)?;
+    let sinks = core_proxy.sinks().await?;
+
+    for sink in sinks.iter().map(|s| s.to_string()) {
+        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
+        return Ok(sink_proxy.mute().await?);
+    }
+    Err("No sink found".into())
+}
+
+pub async fn get_volume() -> Res<u32> {
     let pulse_conn = new_pulse_connection().await?;
 
     let core_proxy = AsyncPulseCoreProxy::new(&pulse_conn)?;
@@ -53,12 +77,6 @@ pub async fn volume() -> Res<u32> {
     for sink in sinks.iter().map(|s| s.to_string()) {
         let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
         let vol = sink_proxy.volume().await?;
-        /*
-        let vol: Vec<u32> = vol
-            .iter()
-            .map(|x| x * 100 / 65536)
-            .collect();
-        */
         return Ok(vol[0]);
     }
     Err("No sink found".into())
@@ -250,4 +268,6 @@ trait Sink {
     fn has_hardware_mute(&self) -> Result<bool>;
     #[dbus_proxy(property)]
     fn set_volume(&self, vols: Vec<u32>) -> Result<()>;
+    #[dbus_proxy(property)]
+    fn set_mute(&self, mute: bool) -> Result<()>;
 }

@@ -7,12 +7,12 @@ use tokio::time::{self, Duration};
 
 use barnine::{
     bar::{Bar, Update},
-    battery::get_battery,
+    battery::watch_battery,
     err::Res,
     logging::init_logging,
-    pulse::get_pulse,
-    rpc::get_rpc,
-    sway::get_sway,
+    pulse::watch_pulse,
+    rpc::watch_rpc,
+    sway::watch_sway,
 };
 
 #[tokio::main]
@@ -28,16 +28,17 @@ async fn main() {
     };
     println!("{}", serde_json::to_string(&header).unwrap());
 
-    // Begin infinite json array of updates
+    // Begin infinite json-array of updates
     println!("[");
 
-    let (tx_updates, mut rx_updates) = unbounded_channel();
+    // Spawn stats collecting workers
+    let (tx_updates, rx_updates) = unbounded_channel();
     let futures_stream = futures::stream::iter(vec![
-        spawn(get_battery(tx_updates.clone())),
-        spawn(get_sway(tx_updates.clone())),
-        spawn(get_time(tx_updates.clone())),
-        spawn(get_rpc(tx_updates.clone())),
-        spawn(get_pulse(tx_updates.clone())),
+        spawn(watch_rpc(tx_updates.clone())),
+        spawn(watch_sway(tx_updates.clone())),
+        spawn(watch_time(tx_updates.clone())),
+        spawn(watch_pulse(tx_updates.clone())),
+        spawn(watch_battery(tx_updates.clone())),
     ]);
 
     // Log worker failures
@@ -48,27 +49,16 @@ async fn main() {
         }
     });
 
-    let (tx_output, mut rx_output) = unbounded_channel();
-    let mut bar = Bar::new(tx_output);
-
-    // Process worker update messages
-    tokio::spawn(async move {
-        while let Some(command) = rx_updates.recv().await {
-            bar.update(command);
-        }
-    });
-
-    // Send redraws to output
-    while let Some(json) = rx_output.recv().await {
-        println!("{},", json);
-    }
+    // Write the bar
+    let mut bar = Bar::new();
+    bar.write_json(&mut std::io::stdout(), rx_updates).await;
 
     unreachable!()
 }
 
 #[tracing::instrument]
-async fn get_time(tx: UnboundedSender<Update>) -> Res<()> {
-    tracing::trace!("START get_time");
+async fn watch_time(tx: UnboundedSender<Update>) -> Res<()> {
+    tracing::trace!("Start watch_time");
     let time_format = "%b %d %A %l:%M:%S %p";
     let mut interval = time::interval(Duration::from_millis(1_000));
 

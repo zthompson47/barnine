@@ -16,7 +16,7 @@ pub struct Battery {
     pub capacity: String,
 }
 
-pub async fn get_battery(tx: UnboundedSender<Update>) -> Res<()> {
+pub async fn watch_battery(tx: UnboundedSender<Update>) -> Res<()> {
     let mut idle = interval(Duration::from_secs(5));
 
     loop {

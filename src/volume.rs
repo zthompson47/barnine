@@ -14,7 +14,7 @@ pub async fn volume(update: Volume) -> Res<u32> {
                 Delta::UpPct(val) => val as i32 * 65536 / 100,
                 Delta::DownPct(val) => -(val as i32) * 65536 / 100,
             };
-            let cur_volume = pulse::volume().await?;
+            let cur_volume = pulse::get_volume().await?;
             let new_volume = cur_volume as i32 + delta;
             let new_volume: u32 = if new_volume < 0 { 0 } else { new_volume as u32 };
             trace!(

@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use swaybar_types::{Align, Block, MinWidth};
 use tokio::sync::mpsc;
 
@@ -13,6 +15,7 @@ pub enum Update {
     Redraw,
     Time(Option<String>),
     Volume(Option<u32>),
+    Mute(Option<bool>),
     WindowName(Option<String>),
 }
 
@@ -24,33 +27,33 @@ pub struct Bar {
     pub window_name: Option<String>,
     pub time: Option<String>,
     pub volume: Option<u32>,
-    output_tx: Option<mpsc::UnboundedSender<String>>,
+    pub mute: Option<bool>,
 }
 
 impl Bar {
-    pub fn new(tx: mpsc::UnboundedSender<String>) -> Self {
-        Bar {
-            output_tx: Some(tx),
-            ..Bar::default()
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn update(&mut self, command: Update) {
-        match command {
-            Update::BatteryCapacity(val) => self.battery_capacity = val,
-            Update::BatteryStatus(val) => self.battery_status = val,
-            Update::Brightness(val) => self.brightness = val,
-            Update::Redraw => self.redraw(),
-            Update::Time(val) => self.time = val,
-            Update::Volume(val) => self.volume = val,
-            Update::WindowName(val) => self.window_name = val,
-        };
-    }
-
-    fn redraw(&self) {
-        if self.output_tx.is_some() {
-            let json = self.to_json().unwrap();
-            self.output_tx.as_ref().unwrap().send(json).unwrap();
+    pub async fn write_json(
+        &mut self,
+        writer: &mut dyn Write,
+        mut rx_updates: mpsc::UnboundedReceiver<Update>,
+    ) {
+        while let Some(cmd) = rx_updates.recv().await {
+            match cmd {
+                Update::Redraw => {
+                    write!(writer, "{},\n", self.to_json().unwrap()).unwrap();
+                    writer.flush().unwrap();
+                }
+                Update::BatteryCapacity(x) => self.battery_capacity = x,
+                Update::BatteryStatus(x) => self.battery_status = x,
+                Update::Brightness(x) => self.brightness = x,
+                Update::Time(x) => self.time = x,
+                Update::Mute(x) => self.mute = x,
+                Update::Volume(x) => self.volume = x,
+                Update::WindowName(x) => self.window_name = x,
+            }
         }
     }
 
@@ -59,7 +62,7 @@ impl Bar {
 
         if self.brightness.is_some() {
             let block = Block {
-                full_text: String::from(format!("{:2.0}", self.brightness.as_ref().unwrap())),
+                full_text: String::from(format!("{:2.0}", self.brightness.unwrap())),
                 background: Some("#004400".to_string()),
                 min_width: Some(MinWidth::Pixels(200)),
                 ..Block::default()
@@ -88,10 +91,7 @@ impl Bar {
 
         if self.window_name.is_some() {
             let window_name = String::from(self.window_name.as_ref().unwrap());
-            // let mut short_window_name = window_name.clone();
-            // short_window_name.truncate(MAX_WINDOW_NAME_LENGTH);
             let short_window_name = truncate(&window_name, MAX_WINDOW_NAME_LENGTH);
-
             let short_window_name = format!("{}...", short_window_name);
             let block = Block {
                 align: Some(Align::Left),
@@ -103,6 +103,16 @@ impl Bar {
                 ..Block::default()
             };
 
+            result.push(serde_json::to_string(&block).unwrap());
+        }
+
+        if self.mute.is_some() {
+            let block = Block {
+                align: Some(Align::Center),
+                full_text: self.mute.as_ref().unwrap().to_string(),
+                background: Some("#000000".to_string()),
+                ..Block::default()
+            };
             result.push(serde_json::to_string(&block).unwrap());
         }
 
@@ -129,11 +139,18 @@ impl Bar {
     }
 }
 
+fn truncate(s: &str, max_chars: usize) -> &str {
+    match s.char_indices().nth(max_chars) {
+        None => s,
+        Some((idx, _)) => &s[..idx],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{Result, Value};
     use swaybar_types::Block;
-    use tokio::sync::mpsc::unbounded_channel;
+    use tokio::sync::mpsc;
 
     use super::{Bar, Update};
 
@@ -154,7 +171,7 @@ mod tests {
             window_name: Some("Window".into()),
             time: Some("12:01".into()),
             volume: Some(22_000),
-            output_tx: None,
+            mute: Some(false),
         };
         let j = d.to_json().unwrap();
         assert!(j.len() > 2);
@@ -169,38 +186,28 @@ mod tests {
 
     #[tokio::test]
     async fn json_from_updates() {
-        let (tx_dr, mut rx_dr) = unbounded_channel::<String>();
-        let mut d = Bar::new(tx_dr);
+        let mut bar = Bar::new();
+        let (tx_updates, rx_updates) = mpsc::unbounded_channel::<Update>();
+        tx_updates.send(Update::Time(Some("12:01".into()))).unwrap();
+        tx_updates
+            .send(Update::BatteryStatus(Some("Full".into())))
+            .unwrap();
+        tx_updates
+            .send(Update::BatteryCapacity(Some("88".into())))
+            .unwrap();
+        tx_updates.send(Update::Redraw).unwrap();
+        drop(tx_updates);
 
-        let (tx_up, mut rx_up) = unbounded_channel::<Update>();
-        tokio::spawn(async move {
-            while let Some(command) = rx_up.recv().await {
-                d.update(command);
-            }
-        });
-        tx_up.send(Update::Time(Some("12:01".into()))).unwrap();
-        tx_up.send(Update::BatteryStatus(Some("Full".into()))).unwrap();
-        tx_up.send(Update::BatteryCapacity(Some("88".into()))).unwrap();
-        tx_up.send(Update::Redraw).unwrap();
+        let mut json = Vec::new();
+        bar.write_json(&mut json, rx_updates).await;
+        let json = String::from_utf8(json).unwrap();
 
-        let mut got_there = false;
-        while let Some(json) = rx_dr.recv().await {
-            got_there = true;
-            let output: Vec<Block> = serde_json::from_str(&json).unwrap();
-            println!("{:?}", output);
-            assert_eq!(3, output.len());
-            assert_eq!("Full", output[0].full_text);
-            assert_eq!("88", output[1].full_text);
-            assert_eq!("12:01", output[2].full_text);
-            break;
-        }
-        assert!(got_there);
-    }
-}
+        let output: Vec<Block> = serde_json::from_str(&json).unwrap();
 
-fn truncate(s: &str, max_chars: usize) -> &str {
-    match s.char_indices().nth(max_chars) {
-        None => s,
-        Some((idx, _)) => &s[..idx],
+        println!("{:?}", output);
+        assert_eq!(3, output.len());
+        assert_eq!("Full", output[0].full_text);
+        assert_eq!("88", output[1].full_text);
+        assert_eq!("12:01", output[2].full_text);
     }
 }

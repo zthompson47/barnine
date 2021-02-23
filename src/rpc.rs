@@ -16,6 +16,7 @@ use crate::{
     brightness::Delta::{DownPct, UpPct},
     err::Res,
     volume::{volume, Volume},
+    pulse::{get_mute, toggle_mute},
 };
 
 pub fn socket_path(app_name: &str) -> PathBuf {
@@ -26,7 +27,7 @@ pub fn socket_path(app_name: &str) -> PathBuf {
     Path::new(&runtime_dir).join(app_name).join(file_name)
 }
 
-pub async fn get_rpc(tx: mpsc::UnboundedSender<Update>) -> Res<()> {
+pub async fn watch_rpc(tx: mpsc::UnboundedSender<Update>) -> Res<()> {
     trace!("Starting get_rpc");
     let sock = socket_path("barnine");
     let _ = fs::remove_file(&sock);
@@ -80,6 +81,16 @@ async fn handle_connection(mut stream: UnixStream, tx: mpsc::UnboundedSender<Upd
                     }
                 }
             }
+
+            match msg {
+                "toggle_mute" => {
+                    toggle_mute().await.unwrap();
+                    tx.send(Update::Mute(Some(get_mute().await.unwrap()))).unwrap();
+                    tx.send(Update::Redraw)?;
+                }
+                _ => {}
+            }
+
         }
     }
     Ok(())
@@ -95,7 +106,7 @@ mod tests {
         time::{sleep, Duration},
     };
 
-    use super::{get_rpc, socket_path};
+    use super::{watch_rpc, socket_path};
     use crate::bar::Update;
 
     #[tokio::test]
@@ -112,7 +123,7 @@ mod tests {
 
         // Start rpc listener task
         let (tx, mut rx) = mpsc::unbounded_channel();
-        tokio::spawn(get_rpc(tx));
+        tokio::spawn(watch_rpc(tx));
 
         // Yield for rpc task to start and create socket
         // TODO test fails intermittently..  needs sync on socket file creation

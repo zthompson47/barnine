@@ -10,7 +10,7 @@ use crate::bar::Update;
 use crate::err::Res;
 use crate::brightness::{brighten, Brightness::Screen, Delta::{DownPct, UpPct}};
 
-pub async fn get_sway(tx: UnboundedSender<Update>) -> Res<()> {
+pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
     let subs = [EventType::Window, EventType::Workspace];
     let mut events = Connection::new().await?.subscribe(&subs).await?;
 
