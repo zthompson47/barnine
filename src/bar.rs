@@ -201,6 +201,8 @@ mod tests {
         let mut json = Vec::new();
         bar.write_json(&mut json, rx_updates).await;
         let json = String::from_utf8(json).unwrap();
+        // Remove trailing ",\n"
+        let json = &json[0..json.len() - 2];
 
         let output: Vec<Block> = serde_json::from_str(&json).unwrap();
 
