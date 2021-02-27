@@ -11,7 +11,7 @@ pub struct Block {
     #[serde(skip_serializing)]
     widget: Option<String>,
     #[serde(skip_serializing)]
-    width: Option<u32>,
+    width: Option<usize>,
     #[serde(skip_serializing)]
     format: Option<String>,
 
@@ -201,8 +201,12 @@ impl Bar {
                 }
                 "window_name" => if self.window_name.is_some() {
                     let window_name = String::from(self.window_name.as_ref().unwrap());
-                    let short_window_name = truncate(&window_name, 100);
-                    let short_window_name = format!("{}...", short_window_name);
+                    let max_chars = match block.width {
+                        Some(width) => width,
+                        None => 100,
+                    };
+                    let short_window_name = truncate(&window_name, max_chars);
+                    let short_window_name = format!("{}*", short_window_name);
                     block.full_text = Some(window_name);
                     block.short_text = Some(short_window_name);
                 }
