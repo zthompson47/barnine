@@ -34,7 +34,7 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                     ..
                 } => {
                     // Get current window name
-                    if !window_name.is_some() {
+                    if window_name.is_none() {
                         debug!("Window change with None window_name");
                     }
                     tx.send(Update::WindowName(Some(window_name.unwrap())))?;

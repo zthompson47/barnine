@@ -1,17 +1,134 @@
 use std::io::Write;
 
-use swaybar_types::{Align, Block, MinWidth};
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use crate::config::Config;
 use crate::err::Res;
 
-pub static MAX_WINDOW_NAME_LENGTH: usize = 80;
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct Block {
+    #[serde(skip_serializing)]
+    widget: Option<String>,
+    #[serde(skip_serializing)]
+    width: Option<u32>,
+    #[serde(skip_serializing)]
+    format: Option<String>,
+
+    full_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    short_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    background: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    separator_block_width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    min_width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    align: Option<Align>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    border: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    border_top: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    border_bottom: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    border_left: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    border_right: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    urgent: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    separator: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    markup: Option<String>,
+}
+
+impl Block {
+    fn load_defaults(&mut self, block: &Block) {
+        if block.background.is_some() {
+            if self.background.is_none() {
+                self.background = block.background.clone();
+            }
+        }
+        if block.separator_block_width.is_some() {
+            if self.separator_block_width.is_none() {
+                self.separator_block_width = block.separator_block_width.clone();
+            }
+        }
+        if block.min_width.is_some() {
+            if self.min_width.is_none() {
+                self.min_width = block.min_width.clone();
+            }
+        }
+        if block.border_top.is_some() {
+            if self.border_top.is_none() {
+                self.border_top = block.border_top.clone();
+            }
+        }
+        if block.border_bottom.is_some() {
+            if self.border_bottom.is_none() {
+                self.border_bottom = block.border_bottom.clone();
+            }
+        }
+        if block.border_left.is_some() {
+            if self.border_left.is_none() {
+                self.border_left = block.border_left.clone();
+            }
+        }
+        if block.border_right.is_some() {
+            if self.border_right.is_none() {
+                self.border_right = block.border_right.clone();
+            }
+        }
+        if block.align.is_some() {
+            if self.align.is_none() {
+                self.align = block.align.clone();
+            }
+        }
+        if block.color.is_some() {
+            if self.color.is_none() {
+                self.color = block.color.clone();
+            }
+        }
+        if block.border.is_some() {
+            if self.border.is_none() {
+                self.border = block.border.clone();
+            }
+        }
+        if block.separator.is_some() {
+            if self.separator.is_none() {
+                self.separator = block.separator.clone();
+            }
+        }
+        if block.markup.is_some() {
+            if self.markup.is_none() {
+                self.markup = block.markup.clone();
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Align {
+    Left,
+    Center,
+    Right,
+}
 
 #[derive(Debug)]
 pub enum Update {
     BatteryCapacity(Option<String>),
     BatteryStatus(Option<String>),
     Brightness(Option<u32>),
+    Config(Config),
     Redraw,
     Time(Option<String>),
     Volume(Option<u32>),
@@ -28,6 +145,7 @@ pub struct Bar {
     pub time: Option<String>,
     pub volume: Option<u32>,
     pub mute: Option<bool>,
+    config: Config,
 }
 
 impl Bar {
@@ -49,6 +167,7 @@ impl Bar {
                 Update::BatteryCapacity(x) => self.battery_capacity = x,
                 Update::BatteryStatus(x) => self.battery_status = x,
                 Update::Brightness(x) => self.brightness = x,
+                Update::Config(x) => self.config = x,
                 Update::Time(x) => self.time = x,
                 Update::Mute(x) => self.mute = x,
                 Update::Volume(x) => self.volume = x,
@@ -57,83 +176,137 @@ impl Bar {
         }
     }
 
-    pub fn to_json(&self) -> Res<String> {
+    pub fn to_json(&mut self) -> Res<String> {
+        //let _background = (&self.config.background).to_string();
         let mut result = Vec::<String>::new();
 
-        if self.brightness.is_some() {
-            let block = Block {
-                full_text: String::from(format!("{:2.0}", self.brightness.unwrap())),
-                background: Some("#004400".to_string()),
-                min_width: Some(MinWidth::Pixels(200)),
-                ..Block::default()
-            };
+        //let bar = self.config.bar.borrow_mut();
+        for i in 0..self.config.bar.len() {
+            //for block in self.config.bar {
+            let mut block = self.config.bar[i].borrow_mut();
+            match block.widget.as_ref().unwrap().as_str() {
+                "time" => if self.time.is_some() {
+                    block.full_text = Some(String::from(self.time.as_ref().unwrap()));
+                }
+                "brightness" => if self.brightness.is_some() {
+                    block.full_text =
+                        Some(String::from(format!("{:2.0}", self.brightness.unwrap())));
+                }
+                "battery" => if self.battery_capacity.is_some() {
+                    block.full_text = Some(format!(
+                        "{} {}%",
+                        self.battery_status.as_ref().unwrap().to_string(),
+                        self.battery_capacity.as_ref().unwrap().to_string(),
+                    ));
+                }
+                "window_name" => if self.window_name.is_some() {
+                    let window_name = String::from(self.window_name.as_ref().unwrap());
+                    let short_window_name = truncate(&window_name, 100);
+                    let short_window_name = format!("{}...", short_window_name);
+                    block.full_text = Some(window_name);
+                    block.short_text = Some(short_window_name);
+                }
+                "volume" => if self.volume.is_some() {
+                    let v = self.volume.as_ref().unwrap();
+                    let pct = v * 100 / 65536;
+                    // let fmt_vol = format!("{:>3}%", pct.to_string());
+
+                    block.full_text = Some(format!(
+                        "{} {:>3}%",
+                        match self.mute.as_ref().unwrap() {
+                            true => "🔇".to_string(),
+                            false => "🔈".to_string(),
+                        },
+                        pct.to_string()
+                    ));
+                }
+                _ => {}
+            }
+            block.load_defaults(&self.config.default.borrow());
+            drop(block);
+            let block = &self.config.bar[i];
             result.push(serde_json::to_string(&block).unwrap());
         }
 
-        if self.battery_status.is_some() {
-            let block_status = Block {
-                full_text: self.battery_status.as_ref().unwrap().to_string(),
-                background: Some("#880000".to_string()),
-                separator_block_width: Some(0),
-                ..Block::default()
-            };
-            result.push(serde_json::to_string(&block_status).unwrap());
-        }
+        /*
+            if self.brightness.is_some() {
+                let block = Block {
+                    full_text: Some(String::from(format!("{:2.0}", self.brightness.unwrap()))),
+                    ..Block::default()
+                };
+                result.push(serde_json::to_string(&block).unwrap());
+            }
 
-        if self.battery_capacity.is_some() {
-            let block_capacity = Block {
-                full_text: self.battery_capacity.as_ref().unwrap().to_string(),
-                background: Some("#990000".to_string()),
-                ..Block::default()
-            };
-            result.push(serde_json::to_string(&block_capacity).unwrap());
-        }
+            if self.battery_status.is_some() {
+                let block_status = Block {
+                    full_text: Some(self.battery_status.as_ref().unwrap().to_string()),
+                    ..Block::default()
+                };
+                result.push(serde_json::to_string(&block_status).unwrap());
+            }
 
-        if self.window_name.is_some() {
-            let window_name = String::from(self.window_name.as_ref().unwrap());
-            let short_window_name = truncate(&window_name, MAX_WINDOW_NAME_LENGTH);
-            let short_window_name = format!("{}...", short_window_name);
-            let block = Block {
-                align: Some(Align::Left),
-                full_text: window_name,
-                short_text: Some(short_window_name),
-                background: Some("#000000".to_string()),
-                // min_width: Some(MinWidth::Percent(100)),
-                min_width: Some(MinWidth::Pixels(1300)),
-                ..Block::default()
-            };
+            if self.battery_capacity.is_some() {
+                let block_capacity = Block {
+                    full_text: Some(self.battery_capacity.as_ref().unwrap().to_string()),
+                    ..Block::default()
+                };
+                result.push(serde_json::to_string(&block_capacity).unwrap());
+            }
 
-            result.push(serde_json::to_string(&block).unwrap());
-        }
+            if self.window_name.is_some() {
+                let window_name = String::from(self.window_name.as_ref().unwrap());
+                let short_window_name = truncate(&window_name, 100);
+                let short_window_name = format!("{}...", short_window_name);
+                let block = Block {
+                    align: Some(Align::Left),
+                    full_text: Some(window_name),
+                    short_text: Some(short_window_name),
+                    min_width: Some(1300),
+                    ..Block::default()
+                };
 
-        if self.mute.is_some() {
-            let block = Block {
-                align: Some(Align::Center),
-                full_text: self.mute.as_ref().unwrap().to_string(),
-                background: Some("#000000".to_string()),
-                ..Block::default()
-            };
-            result.push(serde_json::to_string(&block).unwrap());
-        }
+                result.push(serde_json::to_string(&block).unwrap());
+            }
 
-        if self.volume.is_some() {
-            let block = Block {
-                align: Some(Align::Center),
-                full_text: self.volume.as_ref().unwrap().to_string(),
-                background: Some("#000000".to_string()),
-                ..Block::default()
-            };
-            result.push(serde_json::to_string(&block).unwrap());
-        }
+            if self.mute.is_some() {
+                let block = Block {
+                    align: Some(Align::Center),
+                    full_text: {
+                        match self.mute.as_ref().unwrap() {
+                            true => Some("🔇".to_string()),
+                            false => Some("🔈".to_string()),
+                        }
+                    },
+                    background: Some(background.clone()),
+                    ..Block::default()
+                };
+                result.push(serde_json::to_string(&block).unwrap());
+            }
 
-        if self.time.is_some() {
-            let block = Block {
-                align: Some(Align::Right),
-                full_text: String::from(self.time.as_ref().unwrap()),
-                ..Block::default()
-            };
-            result.push(serde_json::to_string(&block).unwrap());
-        }
+            if self.volume.is_some() {
+                let block = Block {
+                    align: Some(Align::Center),
+                    full_text: Some({
+                        let v = self.volume.as_ref().unwrap();
+                        let pct = v * 100 / 65536;
+                        format!("{:>3}%", pct.to_string())
+                    }),
+                    background: Some(background.clone()),
+                    ..Block::default()
+                };
+                result.push(serde_json::to_string(&block).unwrap());
+            }
+
+            if self.time.is_some() {
+                let block = Block {
+                    align: Some(Align::Right),
+                    background: Some(background.clone()),
+                    full_text: Some(String::from(self.time.as_ref().unwrap())),
+                    ..Block::default()
+                };
+                result.push(serde_json::to_string(&block).unwrap());
+            }
+        */
 
         Ok(format!("[{}]", result.join(",")))
     }

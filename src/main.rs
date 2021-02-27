@@ -8,6 +8,7 @@ use tokio::time::{self, Duration};
 use barnine::{
     bar::{Bar, Update},
     battery::watch_battery,
+    config::watch_config,
     err::Res,
     logging::init_logging,
     pulse::watch_pulse,
@@ -38,6 +39,7 @@ async fn main() {
         spawn(watch_sway(tx_updates.clone())),
         spawn(watch_time(tx_updates.clone())),
         spawn(watch_pulse(tx_updates.clone())),
+        spawn(watch_config(tx_updates.clone())),
         spawn(watch_battery(tx_updates.clone())),
     ]);
 
@@ -56,19 +58,18 @@ async fn main() {
     unreachable!()
 }
 
-#[tracing::instrument]
 async fn watch_time(tx: UnboundedSender<Update>) -> Res<()> {
     tracing::trace!("Start watch_time");
     let time_format = "%b %d %A %l:%M:%S %p";
-    let mut interval = time::interval(Duration::from_millis(1_000));
+    let mut interval = time::interval(Duration::from_secs(1));
 
     loop {
         interval.tick().await;
 
         let now: DateTime<Local> = Local::now();
-        let fmt_now = now.format(time_format).to_string();
+        let fmt_time = Some(now.format(time_format).to_string());
 
-        tx.send(Update::Time(Some(fmt_now)))?;
+        tx.send(Update::Time(Some(fmt_time.as_ref().unwrap().to_string())))?;
         tx.send(Update::Redraw)?;
     }
 }

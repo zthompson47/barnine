@@ -50,7 +50,6 @@ async fn handle_connection(mut stream: UnixStream, tx: mpsc::UnboundedSender<Upd
     let mut buf = vec![0u8; 64];
     if let Ok(len) = stream.read(&mut buf).await {
         if let Ok(msg) = from_utf8(&buf[0..len]) {
-            // Brightness commands
             let brightness_delta = match msg {
                 "brightness_up" => Some(Screen(UpPct(5))),
                 "brightness_down" => Some(Screen(DownPct(5))),
@@ -64,7 +63,6 @@ async fn handle_connection(mut stream: UnixStream, tx: mpsc::UnboundedSender<Upd
                 tx.send(Update::Redraw)?;
             }
 
-            // Volume commands
             let volume_delta = match msg {
                 "volume_up" => Some(Volume::Speakers(UpPct(2))),
                 "volume_down" => Some(Volume::Speakers(DownPct(2))),

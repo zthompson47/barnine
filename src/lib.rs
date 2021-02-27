@@ -1,6 +1,7 @@
 pub mod bar;
 pub mod battery;
 pub mod brightness;
+pub mod config;
 pub mod err;
 pub mod logging;
 pub mod pulse;
