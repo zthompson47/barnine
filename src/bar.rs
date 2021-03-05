@@ -177,52 +177,68 @@ impl Bar {
     }
 
     pub fn to_json(&mut self) -> Res<String> {
-        //let _background = (&self.config.background).to_string();
         let mut result = Vec::<String>::new();
 
-        //let bar = self.config.bar.borrow_mut();
         for i in 0..self.config.bar.len() {
-            //for block in self.config.bar {
             let mut block = self.config.bar[i].borrow_mut();
             match block.widget.as_ref().unwrap().as_str() {
-                "time" => if self.time.is_some() {
-                    block.full_text = Some(String::from(self.time.as_ref().unwrap()));
+                "time" => {
+                    if self.time.is_some() {
+                        block.full_text = Some(String::from(self.time.as_ref().unwrap()));
+                    }
                 }
-                "brightness" => if self.brightness.is_some() {
-                    block.full_text =
-                        Some(String::from(format!("{:2.0}", self.brightness.unwrap())));
+                "brightness" => {
+                    if self.brightness.is_some() {
+                        block.full_text = Some(String::from(format!(
+                            "{:>2}{}",
+                            self.brightness.unwrap(),
+                            "🔅",
+                        )));
+                    }
                 }
-                "battery" => if self.battery_capacity.is_some() {
-                    block.full_text = Some(format!(
-                        "{} {}%",
-                        self.battery_status.as_ref().unwrap().to_string(),
-                        self.battery_capacity.as_ref().unwrap().to_string(),
-                    ));
+                "battery" => {
+                    if self.battery_capacity.is_some() {
+                        block.full_text = Some(format!(
+                            "{}{}",
+                            self.battery_capacity.as_ref().unwrap().to_string(),
+                            match self.battery_status {
+                                Some(ref val) => match val.as_str() {
+                                    "Full" | "Charging" => "🔌",
+                                    "Discharging" => "🔋",
+                                    _ => "n/a ",
+                                },
+                                None => "n/a ",
+                            },
+                        ));
+                    }
                 }
-                "window_name" => if self.window_name.is_some() {
-                    let window_name = String::from(self.window_name.as_ref().unwrap());
-                    let max_chars = match block.width {
-                        Some(width) => width,
-                        None => 100,
-                    };
-                    let short_window_name = truncate(&window_name, max_chars);
-                    let short_window_name = format!("{}*", short_window_name);
-                    block.full_text = Some(window_name);
-                    block.short_text = Some(short_window_name);
+                "window_name" => {
+                    if self.window_name.is_some() {
+                        let window_name = String::from(self.window_name.as_ref().unwrap());
+                        let max_chars = match block.width {
+                            Some(width) => width,
+                            None => 100,
+                        };
+                        let short_window_name = truncate(&window_name, max_chars);
+                        let short_window_name = format!("{}*", short_window_name);
+                        block.full_text = Some(window_name);
+                        block.short_text = Some(short_window_name);
+                    }
                 }
-                "volume" => if self.volume.is_some() {
-                    let v = self.volume.as_ref().unwrap();
-                    let pct = v * 100 / 65536;
-                    // let fmt_vol = format!("{:>3}%", pct.to_string());
+                "volume" => {
+                    if self.volume.is_some() {
+                        let v = self.volume.as_ref().unwrap();
+                        let pct = v * 100 / 65536;
 
-                    block.full_text = Some(format!(
-                        "{} {:>3}%",
-                        match self.mute.as_ref().unwrap() {
-                            true => "🔇".to_string(),
-                            false => "🔈".to_string(),
-                        },
-                        pct.to_string()
-                    ));
+                        block.full_text = Some(format!(
+                            "{:>2}{}",
+                            pct,
+                            match self.mute.as_ref().unwrap() {
+                                true => "🔇",
+                                false => "🔈",
+                            },
+                        ));
+                    }
                 }
                 _ => {}
             }
@@ -231,86 +247,6 @@ impl Bar {
             let block = &self.config.bar[i];
             result.push(serde_json::to_string(&block).unwrap());
         }
-
-        /*
-            if self.brightness.is_some() {
-                let block = Block {
-                    full_text: Some(String::from(format!("{:2.0}", self.brightness.unwrap()))),
-                    ..Block::default()
-                };
-                result.push(serde_json::to_string(&block).unwrap());
-            }
-
-            if self.battery_status.is_some() {
-                let block_status = Block {
-                    full_text: Some(self.battery_status.as_ref().unwrap().to_string()),
-                    ..Block::default()
-                };
-                result.push(serde_json::to_string(&block_status).unwrap());
-            }
-
-            if self.battery_capacity.is_some() {
-                let block_capacity = Block {
-                    full_text: Some(self.battery_capacity.as_ref().unwrap().to_string()),
-                    ..Block::default()
-                };
-                result.push(serde_json::to_string(&block_capacity).unwrap());
-            }
-
-            if self.window_name.is_some() {
-                let window_name = String::from(self.window_name.as_ref().unwrap());
-                let short_window_name = truncate(&window_name, 100);
-                let short_window_name = format!("{}...", short_window_name);
-                let block = Block {
-                    align: Some(Align::Left),
-                    full_text: Some(window_name),
-                    short_text: Some(short_window_name),
-                    min_width: Some(1300),
-                    ..Block::default()
-                };
-
-                result.push(serde_json::to_string(&block).unwrap());
-            }
-
-            if self.mute.is_some() {
-                let block = Block {
-                    align: Some(Align::Center),
-                    full_text: {
-                        match self.mute.as_ref().unwrap() {
-                            true => Some("🔇".to_string()),
-                            false => Some("🔈".to_string()),
-                        }
-                    },
-                    background: Some(background.clone()),
-                    ..Block::default()
-                };
-                result.push(serde_json::to_string(&block).unwrap());
-            }
-
-            if self.volume.is_some() {
-                let block = Block {
-                    align: Some(Align::Center),
-                    full_text: Some({
-                        let v = self.volume.as_ref().unwrap();
-                        let pct = v * 100 / 65536;
-                        format!("{:>3}%", pct.to_string())
-                    }),
-                    background: Some(background.clone()),
-                    ..Block::default()
-                };
-                result.push(serde_json::to_string(&block).unwrap());
-            }
-
-            if self.time.is_some() {
-                let block = Block {
-                    align: Some(Align::Right),
-                    background: Some(background.clone()),
-                    full_text: Some(String::from(self.time.as_ref().unwrap())),
-                    ..Block::default()
-                };
-                result.push(serde_json::to_string(&block).unwrap());
-            }
-        */
 
         Ok(format!("[{}]", result.join(",")))
     }
