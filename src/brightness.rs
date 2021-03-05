@@ -17,6 +17,7 @@ pub enum Delta {
     DownPct(u32),
 }
 
+// TODO use clamp to limit range? or min/max
 pub async fn brighten(update: Brightness) -> Result<u32, Error> {
     match update {
         Brightness::Keyboard(delta) => {
@@ -36,7 +37,7 @@ pub async fn brighten(update: Brightness) -> Result<u32, Error> {
                     &("leds", "smc::kbd_backlight", new_brt),
                 )
                 .await?;
-            Ok(new_brt)
+            Ok(new_brt * 100 / brt_max)
         }
         Brightness::Screen(delta) => {
             let (brt, brt_max) = cur_brt_with_max("backlight", "intel_backlight").await?;
@@ -55,7 +56,7 @@ pub async fn brighten(update: Brightness) -> Result<u32, Error> {
                     &("backlight", "intel_backlight", new_brt),
                 )
                 .await?;
-            Ok(new_brt)
+            Ok(new_brt * 100 / brt_max)
         }
     }
 }
