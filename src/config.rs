@@ -71,7 +71,10 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
     });
 
     loop {
+        send_config_update("barnine", tx_updates.clone()).await?;
         while let Some(()) = rx.recv().await {
+            send_config_update("barnine", tx_updates.clone()).await?;
+            /*
             let config_file = get_config_file("barnine").unwrap();
             if config_file.is_file() {
                 let toml: String = fs::read_to_string(&config_file).await.unwrap();
@@ -84,6 +87,7 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
                 tx_updates.send(Update::Config(config.unwrap())).unwrap();
                 tx_updates.send(Update::Redraw).unwrap();
             }
+            */
         }
         sleep(Duration::from_millis(200)).await;
     }
@@ -99,4 +103,22 @@ fn get_config_file(app_name: &str) -> Res<Box<Path>> {
     };
     config_path.set_extension("toml");
     Ok(config_path.into_boxed_path())
+}
+
+async fn send_config_update(app_name: &str, tx_updates: UnboundedSender<Update>) -> Res<()> {
+    let config_file = get_config_file(app_name).unwrap();
+
+    if config_file.is_file() {
+        let toml: String = fs::read_to_string(&config_file).await.unwrap();
+        let config: Result<Config, _> = toml::from_str(&toml);
+        /*
+        if config.is_err() {
+            break;
+        }
+        */
+        tx_updates.send(Update::Config(config.unwrap())).unwrap();
+        tx_updates.send(Update::Redraw).unwrap();
+    }
+
+    Ok(())
 }
