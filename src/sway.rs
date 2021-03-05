@@ -5,6 +5,7 @@ use swayipc_async::{
 use log::debug;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::StreamExt;
+use tracing::error;
 
 use crate::bar::Update;
 use crate::err::Res;
@@ -59,13 +60,19 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                     ..
                 } => {
                     if contains_firefox(cur_nodes) {
-                        let new_val = brighten(Screen(DownPct(22))).await?;
-                        tx.send(Update::Brightness(Some(new_val)))?;
-                        tx.send(Update::Redraw)?;
+                        if let Ok(new_val) = brighten(Screen(DownPct(22))).await {
+                            tx.send(Update::Brightness(Some(new_val)))?;
+                            tx.send(Update::Redraw)?;
+                        } else {
+                            error!("Couldn't set firefox brightness with dbus");
+                        }
                     } else if contains_firefox(old_nodes) {
-                        let new_val = brighten(Screen(UpPct(22))).await?;
-                        tx.send(Update::Brightness(Some(new_val)))?;
-                        tx.send(Update::Redraw)?;
+                        if let Ok(new_val) = brighten(Screen(UpPct(22))).await {
+                            tx.send(Update::Brightness(Some(new_val)))?;
+                            tx.send(Update::Redraw)?;
+                        } else {
+                            error!("Couldn't set firefox brightness with dbus");
+                        }
                     }
                 }
                 _ => {}
