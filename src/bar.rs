@@ -11,7 +11,7 @@ pub struct Block {
     #[serde(skip_serializing)]
     widget: Option<String>,
     #[serde(skip_serializing)]
-    width: Option<usize>,
+    char_width: Option<usize>,
     #[serde(skip_serializing)]
     format: Option<String>,
 
@@ -215,7 +215,7 @@ impl Bar {
                 "window_name" => {
                     if self.window_name.is_some() {
                         let window_name = String::from(self.window_name.as_ref().unwrap());
-                        let max_chars = match block.width {
+                        let max_chars = match block.char_width {
                             Some(width) => width,
                             None => 100,
                         };
@@ -226,16 +226,17 @@ impl Bar {
                     }
                 }
                 "volume" => {
-                    if self.volume.is_some() {
-                        let v = self.volume.as_ref().unwrap();
+                    if let Some(ref v) = self.volume {
                         let pct = v * 100 / 65536;
-
                         block.full_text = Some(format!(
                             "{:>2}{}",
                             pct,
-                            match self.mute.as_ref().unwrap() {
-                                true => "🔇",
-                                false => "🔈",
+                            match self.mute {  // TODO test missing fields..
+                                Some(mute) => match mute {
+                                    true => "🔇",
+                                    false => "🔈",
+                                }
+                                None => "🔈",
                             },
                         ));
                     }
