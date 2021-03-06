@@ -3,9 +3,8 @@ use std::fmt::{Error, Write};
 use std::path::Path;
 
 use crossterm::style::Colorize;
-use log::info;
 use tracing::subscriber::Subscriber;
-use tracing::{Event, Level};
+use tracing::{info, Event, Level};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling;
 use tracing_log::NormalizeEvent;
@@ -46,11 +45,18 @@ pub fn init_logging(app_name: &str) -> WorkerGuard {
 }
 
 fn get_log_dir(app_name: &str) -> Box<Path> {
-    let result = match env::var("XDG_CACHE_DIR") {
-        Ok(dir) => Path::new(&dir).join(app_name),
-        Err(_) => match env::var("HOME") {
-            Ok(dir) => Path::new(&dir).join(".cache").join(app_name),
-            Err(_) => Path::new("/tmp").join(app_name),
+    // Look for APPNAME_DEV_DIR environment variable to override default
+    let mut dev_dir = app_name.to_uppercase();
+    dev_dir.push_str("_DEV_DIR");
+
+    let result = match env::var(dev_dir) {
+        Ok(dir) => Path::new(&dir).to_path_buf(),
+        Err(_) => match env::var("XDG_CACHE_DIR") {
+            Ok(dir) => Path::new(&dir).join(app_name),
+            Err(_) => match env::var("HOME") {
+                Ok(dir) => Path::new(&dir).join(".cache").join(app_name),
+                Err(_) => Path::new("/tmp").join(app_name),
+            },
         },
     };
 

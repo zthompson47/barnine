@@ -1,4 +1,4 @@
-use std::env::var;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::from_utf8;
@@ -15,21 +15,34 @@ use crate::{
     brightness::Brightness::{Keyboard, Screen},
     brightness::Delta::{DownPct, UpPct},
     err::Res,
-    volume::{volume, Volume},
     pulse::{get_mute, toggle_mute},
+    volume::{volume, Volume},
 };
 
-pub fn socket_path(app_name: &str) -> PathBuf {
+pub fn get_socket_path(app_name: &str) -> PathBuf {
     //! Initialize unix socket in system runtime dir
-    let runtime_dir = var("XDG_RUNTIME_DIR").unwrap_or(String::from("/tmp"));
+
+    // Look for APPNAME_DEV_DIR environment variable to override default
+    let mut dev_dir = app_name.to_uppercase();
+    dev_dir.push_str("_DEV_DIR");
+
     let mut file_name = app_name.to_string();
     file_name.push_str(".sock");
-    Path::new(&runtime_dir).join(app_name).join(file_name)
+
+    match env::var(dev_dir) {
+        Ok(dev_dir) => {
+            Path::new(&dev_dir).join(file_name)
+        }
+        Err(_) => {
+            let run_dir = env::var("XDG_RUNTIME_DIR").unwrap_or(String::from("/tmp"));
+            Path::new(&run_dir).join(app_name).join(file_name)
+        }
+    }
 }
 
 pub async fn watch_rpc(tx: mpsc::UnboundedSender<Update>) -> Res<()> {
     trace!("Starting get_rpc");
-    let sock = socket_path("barnine");
+    let sock = get_socket_path("barnine");
     let _ = fs::remove_file(&sock);
     if let Some(base_dir) = sock.parent() {
         fs::create_dir_all(base_dir)?;
@@ -83,12 +96,12 @@ async fn handle_connection(mut stream: UnixStream, tx: mpsc::UnboundedSender<Upd
             match msg {
                 "toggle_mute" => {
                     toggle_mute().await.unwrap();
-                    tx.send(Update::Mute(Some(get_mute().await.unwrap()))).unwrap();
+                    tx.send(Update::Mute(Some(get_mute().await.unwrap())))
+                        .unwrap();
                     tx.send(Update::Redraw)?;
                 }
                 _ => {}
             }
-
         }
     }
     Ok(())
@@ -104,7 +117,7 @@ mod tests {
         time::{sleep, Duration},
     };
 
-    use super::{watch_rpc, socket_path};
+    use super::{get_socket_path, watch_rpc};
     use crate::bar::Update;
 
     #[tokio::test]
@@ -117,7 +130,7 @@ mod tests {
 
         // Check against actual socket path
         std::env::set_var("XDG_RUNTIME_DIR", &dir);
-        assert_eq!(sock_path, socket_path(app_name));
+        assert_eq!(sock_path, get_socket_path(app_name));
 
         // Start rpc listener task
         let (tx, mut rx) = mpsc::unbounded_channel();
@@ -147,6 +160,6 @@ mod tests {
     #[test]
     fn fallback_socket_in_tmp() {
         std::env::remove_var("XDG_RUNTIME_DIR");
-        assert!(socket_path("foo").starts_with("/tmp"));
+        assert!(get_socket_path("foo").starts_with("/tmp"));
     }
 }

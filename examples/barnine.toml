@@ -5,17 +5,17 @@ border = "#00aa00"
 
 [[bar]]
 widget = "brightness"
-border = "#00aa00"
+border = "#22aa00"
 
 [[bar]]
 widget = "battery"
-border = "#00aa00"
+border = "#00aa44"
 
 [[bar]]
 widget = "window_name"
 align = "left"
-min_width = 1321
-width = 80
+min_width = 1400
+char_width = 80
 
 [[bar]]
 widget = "volume"

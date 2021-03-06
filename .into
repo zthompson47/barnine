@@ -1,0 +1,4 @@
+mkdir -p .run
+export RUST_LOG=DEBUG
+export BARNINE_DEV_DIR=`realpath .run`
+export PS1="%F{#68ff00}☀%f$PS1"
