@@ -1,8 +1,6 @@
 use std::cell::RefCell;
 use std::env;
 use std::path::Path;
-use std::sync::mpsc::channel;
-use std::thread;
 
 use notify::event::DataChange::Any;
 use notify::event::ModifyKind::Data;
@@ -12,7 +10,6 @@ use notify::{Event, RecommendedWatcher, Watcher};
 use serde_derive::Deserialize;
 use tokio::fs;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
-use tokio::time::{sleep, Duration};
 use tracing::debug;
 
 use crate::bar::{Block, Update};
@@ -34,50 +31,70 @@ impl Default for Config {
 }
 
 pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
-    let (tx, mut rx) = unbounded_channel::<()>();
-
     // TODO create config dir and sample barnine.toml if absent
+    debug!("in watch_config thread");
+    let (tx_watcher, mut rx_watcher) = unbounded_channel::<()>();
 
-    thread::spawn(move || {
-        debug!("in watch_config thread");
-        let (tx_local, rx_local) = channel::<()>();
-        let mut config: RecommendedWatcher;
-        config = Watcher::new_immediate(move |e| match e {
-            Ok(event) => match event {
-                Event {
-                    kind: Modify(Data(Any)),
-                    ..
-                } => tx_local.send(()).unwrap(),
-                _ => {
+    let mut config: RecommendedWatcher = Watcher::new_immediate(move |e| match e {
+        Ok(event) => match event {
+            Event {
+                kind: Modify(Data(Any)),
+                paths: ref p,
+                ..
+            } => {
+                // Confirm that the modification is on the watched file
+                let watched_file = get_config_file("barnine").unwrap();
+                if p.contains(&std::path::PathBuf::from(watched_file)) {
                     debug!("got event-->>{:?}", event);
+                    tx_watcher.send(()).unwrap();
                 }
-            },
+            }
             _ => {}
-        })
-        .unwrap();
-        debug!(
-            "about to watch config file:{:?}",
-            get_config_file("barnine").unwrap()
-        );
-        config
-            .watch(
-                get_config_file("barnine").unwrap().parent().unwrap(),
-                NonRecursive,
-            )
-            .unwrap();
-        while let Ok(()) = rx_local.recv() {
-            debug!("got Modify(Data( signal");
-            tx.send(()).unwrap();
-        }
-    });
+        },
+        _ => {}
+    })
+    .unwrap();
 
-    loop {
+    debug!(
+        "about to watch config file:{:?}",
+        get_config_file("barnine").unwrap()
+    );
+
+    config
+        .watch(
+            // TODO why do I need to monitor parent and not the file..
+            //      with just the file: no Modify(Data(Any)) received.. ?!?
+            get_config_file("barnine").unwrap().parent().unwrap(),
+            NonRecursive,
+        )
+        .unwrap();
+
+    // Load config file at startup
+    send_config_update("barnine", tx_updates.clone()).await?;
+
+    while let Some(()) = rx_watcher.recv().await {
+        debug!("got Modify(Data()) recv");
         send_config_update("barnine", tx_updates.clone()).await?;
-        while let Some(()) = rx.recv().await {
-            send_config_update("barnine", tx_updates.clone()).await?;
-        }
-        sleep(Duration::from_millis(200)).await;
     }
+
+    Ok(())
+}
+
+async fn send_config_update(app_name: &str, tx_updates: UnboundedSender<Update>) -> Res<()> {
+    let config_file = get_config_file(app_name).unwrap();
+    if config_file.is_file() {
+        let toml: String = fs::read_to_string(&config_file).await.unwrap();
+        let config: Result<Config, _> = toml::from_str(&toml);
+        /* TODO
+        if config.is_err() {
+            break;
+        }
+        */
+        tx_updates.send(Update::Config(config.unwrap())).unwrap();
+        tx_updates.send(Update::Redraw).unwrap();
+    }
+
+    Ok(())
 }
 
 fn get_config_file(app_name: &str) -> Res<Box<Path>> {
@@ -101,21 +118,4 @@ fn get_config_file(app_name: &str) -> Res<Box<Path>> {
     config_path.set_extension("toml");
 
     Ok(config_path.into_boxed_path())
-}
-
-async fn send_config_update(app_name: &str, tx_updates: UnboundedSender<Update>) -> Res<()> {
-    let config_file = get_config_file(app_name).unwrap();
-    if config_file.is_file() {
-        let toml: String = fs::read_to_string(&config_file).await.unwrap();
-        let config: Result<Config, _> = toml::from_str(&toml);
-        /*
-        if config.is_err() {
-            break;
-        }
-        */
-        tx_updates.send(Update::Config(config.unwrap())).unwrap();
-        tx_updates.send(Update::Redraw).unwrap();
-    }
-
-    Ok(())
 }
