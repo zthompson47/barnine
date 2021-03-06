@@ -34,8 +34,9 @@ impl Default for Config {
 }
 
 pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
-    debug!("in watch_config");
     let (tx, mut rx) = unbounded_channel::<()>();
+
+    // TODO create config dir and sample barnine.toml if absent
 
     thread::spawn(move || {
         debug!("in watch_config thread");
@@ -74,40 +75,36 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
         send_config_update("barnine", tx_updates.clone()).await?;
         while let Some(()) = rx.recv().await {
             send_config_update("barnine", tx_updates.clone()).await?;
-            /*
-            let config_file = get_config_file("barnine").unwrap();
-            if config_file.is_file() {
-                let toml: String = fs::read_to_string(&config_file).await.unwrap();
-                debug!("abou to -------------------!!!!!11--------------------");
-                let config: Result<Config, _> = toml::from_str(&toml);
-                debug!("{:#?}", config);
-                if config.is_err() {
-                    break;
-                }
-                tx_updates.send(Update::Config(config.unwrap())).unwrap();
-                tx_updates.send(Update::Redraw).unwrap();
-            }
-            */
         }
         sleep(Duration::from_millis(200)).await;
     }
 }
 
 fn get_config_file(app_name: &str) -> Res<Box<Path>> {
-    let mut config_path = match env::var("XDG_CONFIG_HOME") {
-        Ok(dir) => Path::new(&dir).join(app_name),
-        Err(_) => match env::var("HOME") {
-            Ok(dir) => Path::new(&dir).join(".config").join(app_name),
-            Err(_) => Path::new("/tmp").join(app_name),
+    // Look for APPNAME_DEV_DIR environment variable to override default
+    let mut dev_dir = app_name.to_uppercase();
+    dev_dir.push_str("_DEV_DIR");
+
+    let mut config_path = match env::var(&dev_dir) {
+        Ok(dev_dir) => Path::new(&dev_dir).join(app_name),
+        Err(_) => match env::var("XDG_CONFIG_HOME") {
+            Ok(dir) => Path::new(&dir).join(app_name).join(app_name),
+            Err(_) => match env::var("HOME") {
+                Ok(dir) => Path::new(&dir)
+                    .join(".config")
+                    .join(app_name)
+                    .join(app_name),
+                Err(_) => Path::new("/tmp").join(app_name),
+            },
         },
     };
     config_path.set_extension("toml");
+
     Ok(config_path.into_boxed_path())
 }
 
 async fn send_config_update(app_name: &str, tx_updates: UnboundedSender<Update>) -> Res<()> {
     let config_file = get_config_file(app_name).unwrap();
-
     if config_file.is_file() {
         let toml: String = fs::read_to_string(&config_file).await.unwrap();
         let config: Result<Config, _> = toml::from_str(&toml);
