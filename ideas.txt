@@ -1,0 +1,2 @@
+bouncing color squares in window title
+seconds count down
