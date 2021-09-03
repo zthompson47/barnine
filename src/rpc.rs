@@ -30,11 +30,9 @@ pub fn get_socket_path(app_name: &str) -> PathBuf {
     file_name.push_str(".sock");
 
     match env::var(dev_dir) {
-        Ok(dev_dir) => {
-            Path::new(&dev_dir).join(file_name)
-        }
+        Ok(dev_dir) => Path::new(&dev_dir).join(file_name),
         Err(_) => {
-            let run_dir = env::var("XDG_RUNTIME_DIR").unwrap_or(String::from("/tmp"));
+            let run_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| String::from("/tmp"));
             Path::new(&run_dir).join(app_name).join(file_name)
         }
     }
@@ -50,11 +48,8 @@ pub async fn watch_rpc(tx: mpsc::UnboundedSender<Update>) -> Res<()> {
     let listener = UnixListener::bind(&sock)?;
 
     loop {
-        match listener.accept().await {
-            Ok((stream, _addr)) => {
-                spawn(handle_connection(stream, tx.clone()));
-            }
-            Err(_) => {}
+        if let Ok((stream, _addr)) = listener.accept().await {
+            spawn(handle_connection(stream, tx.clone()));
         }
     }
 }
@@ -93,14 +88,11 @@ async fn handle_connection(mut stream: UnixStream, tx: mpsc::UnboundedSender<Upd
                 }
             }
 
-            match msg {
-                "toggle_mute" => {
-                    toggle_mute().await.unwrap();
-                    tx.send(Update::Mute(Some(get_mute().await.unwrap())))
-                        .unwrap();
-                    tx.send(Update::Redraw)?;
-                }
-                _ => {}
+            if let "toggle_mute" = msg {
+                toggle_mute().await.unwrap();
+                tx.send(Update::Mute(Some(get_mute().await.unwrap())))
+                    .unwrap();
+                tx.send(Update::Redraw)?;
             }
         }
     }
@@ -129,6 +121,7 @@ mod tests {
         sock_path.set_extension("sock");
 
         // Check against actual socket path
+        std::env::remove_var("BARNINE_DEV_DIR");
         std::env::set_var("XDG_RUNTIME_DIR", &dir);
         assert_eq!(sock_path, get_socket_path(app_name));
 

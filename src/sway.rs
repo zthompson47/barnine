@@ -8,8 +8,12 @@ use tokio_stream::StreamExt;
 use tracing::error;
 
 use crate::bar::Update;
+use crate::brightness::{
+    brighten,
+    Brightness::Screen,
+    Delta::{DownPct, UpPct},
+};
 use crate::err::Res;
-use crate::brightness::{brighten, Brightness::Screen, Delta::{DownPct, UpPct}};
 
 pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
     let subs = [EventType::Window, EventType::Workspace];
@@ -52,13 +56,22 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                 }
             },
 
-            Event::Workspace(workspace_event) => match *workspace_event {
-                WorkspaceEvent {
+            Event::Workspace(workspace_event) => {
+                if let WorkspaceEvent {
                     change: WorkspaceChange::Focus,
-                    current: Some(Node { nodes: ref cur_nodes, .. }),
-                    old: Some(Node { nodes: ref old_nodes, .. }),
+                    current:
+                        Some(Node {
+                            nodes: ref cur_nodes,
+                            ..
+                        }),
+                    old:
+                        Some(Node {
+                            nodes: ref old_nodes,
+                            ..
+                        }),
                     ..
-                } => {
+                } = *workspace_event
+                {
                     if contains_firefox(cur_nodes) {
                         if let Ok(new_val) = brighten(Screen(DownPct(22))).await {
                             tx.send(Update::Brightness(Some(new_val)))?;
@@ -75,8 +88,7 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                         }
                     }
                 }
-                _ => {}
-            },
+            }
 
             _ => {}
         }
@@ -86,16 +98,14 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
 
 fn contains_firefox(nodes: &[Node]) -> bool {
     for node in nodes {
-        match node {
-            Node {
-                app_id: Some(app_id),
-                ..
-            } => {
-                if app_id.starts_with("firefox") {
-                    return true;
-                }
+        if let Node {
+            app_id: Some(app_id),
+            ..
+        } = node
+        {
+            if app_id.starts_with("firefox") {
+                return true;
             }
-            _ => {}
         }
     }
 
@@ -105,8 +115,10 @@ fn contains_firefox(nodes: &[Node]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::contains_firefox;
-    use crate::bar::{Bar, MAX_WINDOW_NAME_LENGTH};
+    use crate::bar::Bar;
     use crate::tests;
+
+    const MAX_WINDOW_NAME_LENGTH: usize = 80;
 
     #[test]
     fn identify_firefox_node() {

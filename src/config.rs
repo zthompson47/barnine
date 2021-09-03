@@ -35,24 +35,31 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
     debug!("in watch_config thread");
     let (tx_watcher, mut rx_watcher) = unbounded_channel::<()>();
 
-    let mut config: RecommendedWatcher = Watcher::new_immediate(move |e| match e {
-        Ok(event) => match event {
-            Event {
-                kind: Modify(Data(Any)),
-                paths: ref p,
-                ..
-            } => {
-                // Confirm that the modification is on the watched file
-                let watched_file = get_config_file("barnine").unwrap();
-                if p.contains(&std::path::PathBuf::from(watched_file)) {
-                    debug!("got event-->>{:?}", event);
-                    tx_watcher.send(()).unwrap();
-                }
+    let mut config: RecommendedWatcher = Watcher::new_immediate(move |e|
+
+
+    //match e {
+    if let Ok(event) = e {
+        if let Event {
+            kind: Modify(Data(Any)),
+            paths: ref p,
+            ..
+        } = event
+        {
+            // Confirm that the modification is on the watched file
+            let watched_file = get_config_file("barnine").unwrap();
+            if p.contains(&std::path::PathBuf::from(watched_file)) {
+                debug!("got event-->>{:?}", event);
+                tx_watcher.send(()).unwrap();
             }
-            _ => {}
-        },
-        _ => {}
-    })
+        }
+    }
+        //_ => {}
+
+
+
+
+    )
     .unwrap();
 
     debug!(
@@ -90,7 +97,9 @@ async fn send_config_update(app_name: &str, tx_updates: UnboundedSender<Update>)
             break;
         }
         */
-        tx_updates.send(Update::Config(config.unwrap())).unwrap();
+        tx_updates
+            .send(Update::Config(Box::new(config.unwrap())))
+            .unwrap();
         tx_updates.send(Update::Redraw).unwrap();
     }
 

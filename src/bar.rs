@@ -52,65 +52,41 @@ pub struct Block {
 
 impl Block {
     fn load_defaults(&mut self, block: &Block) {
-        if block.background.is_some() {
-            if self.background.is_none() {
-                self.background = block.background.clone();
-            }
+        if block.background.is_some() && self.background.is_none() {
+            self.background = block.background.clone();
         }
-        if block.separator_block_width.is_some() {
-            if self.separator_block_width.is_none() {
-                self.separator_block_width = block.separator_block_width.clone();
-            }
+        if block.separator_block_width.is_some() && self.separator_block_width.is_none() {
+            self.separator_block_width = block.separator_block_width;
         }
-        if block.min_width.is_some() {
-            if self.min_width.is_none() {
-                self.min_width = block.min_width.clone();
-            }
+        if block.min_width.is_some() && self.min_width.is_none() {
+            self.min_width = block.min_width;
         }
-        if block.border_top.is_some() {
-            if self.border_top.is_none() {
-                self.border_top = block.border_top.clone();
-            }
+        if block.border_top.is_some() && self.border_top.is_none() {
+            self.border_top = block.border_top;
         }
-        if block.border_bottom.is_some() {
-            if self.border_bottom.is_none() {
-                self.border_bottom = block.border_bottom.clone();
-            }
+        if block.border_bottom.is_some() && self.border_bottom.is_none() {
+            self.border_bottom = block.border_bottom;
         }
-        if block.border_left.is_some() {
-            if self.border_left.is_none() {
-                self.border_left = block.border_left.clone();
-            }
+        if block.border_left.is_some() && self.border_left.is_none() {
+            self.border_left = block.border_left;
         }
-        if block.border_right.is_some() {
-            if self.border_right.is_none() {
-                self.border_right = block.border_right.clone();
-            }
+        if block.border_right.is_some() && self.border_right.is_none() {
+            self.border_right = block.border_right;
         }
-        if block.align.is_some() {
-            if self.align.is_none() {
-                self.align = block.align.clone();
-            }
+        if block.align.is_some() && self.align.is_none() {
+            self.align = block.align.clone();
         }
-        if block.color.is_some() {
-            if self.color.is_none() {
-                self.color = block.color.clone();
-            }
+        if block.color.is_some() && self.color.is_none() {
+            self.color = block.color.clone();
         }
-        if block.border.is_some() {
-            if self.border.is_none() {
-                self.border = block.border.clone();
-            }
+        if block.border.is_some() && self.border.is_none() {
+            self.border = block.border.clone();
         }
-        if block.separator.is_some() {
-            if self.separator.is_none() {
-                self.separator = block.separator.clone();
-            }
+        if block.separator.is_some() && self.separator.is_none() {
+            self.separator = block.separator;
         }
-        if block.markup.is_some() {
-            if self.markup.is_none() {
-                self.markup = block.markup.clone();
-            }
+        if block.markup.is_some() && self.markup.is_none() {
+            self.markup = block.markup.clone();
         }
     }
 }
@@ -128,7 +104,7 @@ pub enum Update {
     BatteryCapacity(Option<String>),
     BatteryStatus(Option<String>),
     Brightness(Option<u32>),
-    Config(Config),
+    Config(Box<Config>),
     Redraw,
     Time(Option<String>),
     Volume(Option<u32>),
@@ -159,15 +135,17 @@ impl Bar {
         mut rx_updates: mpsc::UnboundedReceiver<Update>,
     ) {
         while let Some(cmd) = rx_updates.recv().await {
+            println!("{:?}", cmd);
             match cmd {
                 Update::Redraw => {
-                    write!(writer, "{},\n", self.to_json().unwrap()).unwrap();
+                    //println!("####{:?}", self);
+                    writeln!(writer, "{},", self.to_json().unwrap()).unwrap();
                     writer.flush().unwrap();
                 }
                 Update::BatteryCapacity(x) => self.battery_capacity = x,
                 Update::BatteryStatus(x) => self.battery_status = x,
                 Update::Brightness(x) => self.brightness = x,
-                Update::Config(x) => self.config = x,
+                Update::Config(x) => self.config = *x,
                 Update::Time(x) => self.time = x,
                 Update::Mute(x) => self.mute = x,
                 Update::Volume(x) => self.volume = x,
@@ -181,6 +159,7 @@ impl Bar {
 
         for i in 0..self.config.bar.len() {
             let mut block = self.config.bar[i].borrow_mut();
+            println!("+++++++--> {:?}", block);
             match block.widget.as_ref().unwrap().as_str() {
                 "time" => {
                     if self.time.is_some() {
@@ -189,11 +168,11 @@ impl Bar {
                 }
                 "brightness" => {
                     if self.brightness.is_some() {
-                        block.full_text = Some(String::from(format!(
+                        block.full_text = Some(format!(
                             "{:>2}{}",
                             self.brightness.unwrap(),
                             "🔅",
-                        )));
+                        ));
                     }
                 }
                 "battery" => {
@@ -215,10 +194,7 @@ impl Bar {
                 "window_name" => {
                     if self.window_name.is_some() {
                         let window_name = String::from(self.window_name.as_ref().unwrap());
-                        let max_chars = match block.char_width {
-                            Some(width) => width,
-                            None => 100,
-                        };
+                        let max_chars = block.char_width.unwrap_or(100);
                         let short_window_name = truncate(&window_name, max_chars);
                         let short_window_name = format!("{}*", short_window_name);
                         block.full_text = Some(window_name);
@@ -231,11 +207,12 @@ impl Bar {
                         block.full_text = Some(format!(
                             "{:>2}{}",
                             pct,
-                            match self.mute {  // TODO test missing fields..
+                            match self.mute {
+                                // TODO test missing fields..
                                 Some(mute) => match mute {
                                     true => "🔇",
                                     false => "🔈",
-                                }
+                                },
                                 None => "🔈",
                             },
                         ));
@@ -268,9 +245,13 @@ mod tests {
 
     use super::{Bar, Update};
 
+    use crate::config::Config;
+
+    //static CONFIG: &str = "[default]\n[[bar]]\nwidget = \"time\"";
+
     #[test]
     fn json_output_empty() {
-        let d = Bar::default();
+        let mut d = Bar::default();
         let j = d.to_json().unwrap();
 
         assert_eq!("[]", j.as_str());
@@ -278,7 +259,20 @@ mod tests {
 
     #[test]
     fn json_output_full() -> Result<()> {
-        let d = Bar {
+        let config: Config = toml::from_str(concat!(
+                "[default]\n",
+                "[[bar]]\n",
+                "widget = \"brightness\"\n",
+                "[[bar]]\n",
+                "widget = \"battery\"\n",
+                "[[bar]]\n",
+                "widget = \"window_name\"\n",
+                "[[bar]]\n",
+                "widget = \"volume\"\n",
+                "[[bar]]\n",
+                "widget = \"time\"\n",
+        )).unwrap();
+        let mut d = Bar {
             battery_status: Some("Full".into()),
             battery_capacity: Some("99".into()),
             brightness: Some(1_000),
@@ -286,21 +280,41 @@ mod tests {
             time: Some("12:01".into()),
             volume: Some(22_000),
             mute: Some(false),
+            config,
         };
+        println!("%%%%%%%%%%>>{:?}", d);
         let j = d.to_json().unwrap();
         assert!(j.len() > 2);
 
         // Basic sanity test: valid json and an expected value
         let json: Value = serde_json::from_str(&j)?;
         let first = &json[0];
-        assert_eq!("1000", &first["full_text"]);
+        assert!(&first["full_text"].as_str().unwrap().starts_with("1000"));
 
         Ok(())
     }
 
     #[tokio::test]
     async fn json_from_updates() {
-        let mut bar = Bar::new();
+        //let mut bar = Bar::new();
+        let config: Config = toml::from_str(concat!(
+                "[default]\n",
+                "[[bar]]\n",
+                "widget = \"battery\"\n",
+                "[[bar]]\n",
+                "widget = \"time\"\n",
+        )).unwrap();
+        let mut bar = Bar {
+            battery_status: Some("Full".into()),
+            battery_capacity: Some("99".into()),
+            brightness: None,
+            window_name: None,
+            time: Some("12:01".into()),
+            volume: None,
+            mute: None,
+            config,
+        };
+
         let (tx_updates, rx_updates) = mpsc::unbounded_channel::<Update>();
         tx_updates.send(Update::Time(Some("12:01".into()))).unwrap();
         tx_updates
@@ -318,12 +332,11 @@ mod tests {
         // Remove trailing ",\n"
         let json = &json[0..json.len() - 2];
 
-        let output: Vec<Block> = serde_json::from_str(&json).unwrap();
+        let output: Vec<Block> = serde_json::from_str(json).unwrap();
 
-        println!("{:?}", output);
-        assert_eq!(3, output.len());
-        assert_eq!("Full", output[0].full_text);
-        assert_eq!("88", output[1].full_text);
-        assert_eq!("12:01", output[2].full_text);
+        println!("???????????????????????{:?}", output);
+        assert_eq!(2, output.len());
+        assert!(output[0].full_text.starts_with("88"));
+        assert_eq!("12:01", output[1].full_text);
     }
 }

@@ -61,11 +61,12 @@ pub async fn get_mute() -> Res<bool> {
     let core_proxy = AsyncPulseCoreProxy::new(&pulse_conn)?;
     let sinks = core_proxy.sinks().await?;
 
-    for sink in sinks.iter().map(|s| s.to_string()) {
-        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
-        return Ok(sink_proxy.mute().await?);
+    if let Some(sink) = sinks.get(0) {
+        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink.to_string())?;
+        Ok(sink_proxy.mute().await?)
+    } else {
+        Err("No sink found".into())
     }
-    Err("No sink found".into())
 }
 
 pub async fn get_volume() -> Res<u32> {
@@ -74,12 +75,13 @@ pub async fn get_volume() -> Res<u32> {
     let core_proxy = AsyncPulseCoreProxy::new(&pulse_conn)?;
     let sinks = core_proxy.sinks().await?;
 
-    for sink in sinks.iter().map(|s| s.to_string()) {
-        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink)?;
+    if let Some(sink) = sinks.get(0) {
+        let sink_proxy = AsyncSinkProxy::new_for_path(&pulse_conn, sink.to_string())?;
         let vol = sink_proxy.volume().await?;
-        return Ok(vol[0]);
+        Ok(vol[0])
+    } else {
+        Err("No sink found".into())
     }
-    Err("No sink found".into())
 }
 
 async fn new_pulse_connection() -> Res<Connection> {
@@ -95,7 +97,7 @@ pub async fn pulse_info() -> Vec<String> {
     let conn = Connection::new_session().await.unwrap();
     let p = AsyncPulseAddressProxy::new(&conn).unwrap();
     let addr = p.address().await.unwrap();
-    result.push(format!("{}", addr));
+    result.push(addr.to_string());
 
     let pulse_conn = Connection::new_for_address(&addr, false).await.unwrap();
     let c = AsyncPulseCoreProxy::new(&pulse_conn).unwrap();
