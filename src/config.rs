@@ -35,7 +35,7 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
     debug!("in watch_config thread");
     let (tx_watcher, mut rx_watcher) = unbounded_channel::<()>();
 
-    let mut config: RecommendedWatcher = Watcher::new_immediate(move |e|
+    let mut config: RecommendedWatcher = Watcher::new(move |e|
 
 
     //match e {

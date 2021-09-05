@@ -16,7 +16,8 @@ use barnine::{
     sway::watch_sway,
 };
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
+//#[tokio::main]
 async fn main() {
     let _guard = init_logging("barnine");
 

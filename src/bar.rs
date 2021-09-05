@@ -135,10 +135,8 @@ impl Bar {
         mut rx_updates: mpsc::UnboundedReceiver<Update>,
     ) {
         while let Some(cmd) = rx_updates.recv().await {
-            println!("{:?}", cmd);
             match cmd {
                 Update::Redraw => {
-                    //println!("####{:?}", self);
                     writeln!(writer, "{},", self.to_json().unwrap()).unwrap();
                     writer.flush().unwrap();
                 }
@@ -159,7 +157,6 @@ impl Bar {
 
         for i in 0..self.config.bar.len() {
             let mut block = self.config.bar[i].borrow_mut();
-            println!("+++++++--> {:?}", block);
             match block.widget.as_ref().unwrap().as_str() {
                 "time" => {
                     if self.time.is_some() {
@@ -282,7 +279,6 @@ mod tests {
             mute: Some(false),
             config,
         };
-        println!("%%%%%%%%%%>>{:?}", d);
         let j = d.to_json().unwrap();
         assert!(j.len() > 2);
 
@@ -334,7 +330,6 @@ mod tests {
 
         let output: Vec<Block> = serde_json::from_str(json).unwrap();
 
-        println!("???????????????????????{:?}", output);
         assert_eq!(2, output.len());
         assert!(output[0].full_text.starts_with("88"));
         assert_eq!("12:01", output[1].full_text);
