@@ -10,11 +10,12 @@ use tokio::sync::mpsc;
 use tracing::{debug, trace};
 
 use crate::{
-    bar::{NineCmd, Update},
+    bar::Update,
     brightness::brighten,
     brightness::Brightness::{Keyboard, Screen},
     brightness::Delta::{DownPct, UpPct},
     err::Res,
+    nine::NineCmd,
     pulse::{get_mute, toggle_mute},
     volume::{volume, Volume},
 };

@@ -4,6 +4,7 @@ pub mod brightness;
 pub mod config;
 pub mod err;
 pub mod logging;
+pub mod nine;
 pub mod pulse;
 pub mod rpc;
 pub mod sway;

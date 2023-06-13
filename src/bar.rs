@@ -3,8 +3,11 @@ use std::io::Write;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use crate::config::Config;
-use crate::err::Res;
+use crate::{
+    config::Config,
+    err::Res,
+    nine::{NineCmd, Position},
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -119,17 +122,6 @@ pub enum Update {
     Nine(NineCmd),
 }
 
-#[derive(Debug)]
-pub enum NineCmd {
-    MoveLeft,
-    MoveRight,
-    MoveUp,
-    MoveDown,
-    MoveTo(i32),
-}
-
-use NineCmd::*;
-
 #[derive(Debug, Default)]
 pub struct Bar {
     pub battery_status: Option<String>,
@@ -141,141 +133,6 @@ pub struct Bar {
     pub mute: Option<bool>,
     config: Config,
     nine: Position,
-}
-
-#[derive(Debug, Default)]
-enum Position {
-    #[default]
-    TopLeft,
-    MiddleLeft,
-    BottomLeft,
-    TopMiddle,
-    MiddleMiddle,
-    BottomMiddle,
-    TopRight,
-    MiddleRight,
-    BottomRight,
-}
-
-use Position::*;
-
-impl From<i32> for Position {
-    fn from(value: i32) -> Self {
-        match value {
-            2 => TopLeft,
-            1 => MiddleLeft,
-            8 => BottomLeft,
-            3 => TopMiddle,
-            5 => MiddleMiddle,
-            4 => BottomMiddle,
-            6 => TopRight,
-            7 => MiddleRight,
-            0 => BottomRight,
-            _ => panic!(),
-        }
-    }
-}
-
-impl Position {
-    fn num(&self) -> i32 {
-        match self {
-            TopLeft => 2,
-            MiddleLeft => 1,
-            BottomLeft => 8,
-            TopMiddle => 3,
-            MiddleMiddle => 5,
-            BottomMiddle => 4,
-            TopRight => 6,
-            MiddleRight => 7,
-            BottomRight => 0,
-        }
-    }
-
-    fn map_cmd(&self, cmd: NineCmd) -> Self {
-        match self {
-            TopLeft => match cmd {
-                MoveLeft => TopRight,
-                MoveRight => TopMiddle,
-                MoveUp => BottomLeft,
-                MoveDown => MiddleLeft,
-                MoveTo(_) => panic!(),
-            },
-            MiddleLeft => match cmd {
-                MoveLeft => MiddleRight,
-                MoveRight => MiddleMiddle,
-                MoveUp => TopLeft,
-                MoveDown => BottomLeft,
-                MoveTo(_) => panic!(),
-            },
-            BottomLeft => match cmd {
-                MoveLeft => BottomRight,
-                MoveRight => BottomMiddle,
-                MoveUp => MiddleLeft,
-                MoveDown => TopLeft,
-                MoveTo(_) => panic!(),
-            },
-            TopMiddle => match cmd {
-                MoveLeft => TopLeft,
-                MoveRight => TopRight,
-                MoveUp => BottomMiddle,
-                MoveDown => MiddleMiddle,
-                MoveTo(_) => panic!(),
-            },
-            MiddleMiddle => match cmd {
-                MoveLeft => MiddleLeft,
-                MoveRight => MiddleRight,
-                MoveUp => TopMiddle,
-                MoveDown => BottomMiddle,
-                MoveTo(_) => panic!(),
-            },
-            BottomMiddle => match cmd {
-                MoveLeft => BottomLeft,
-                MoveRight => BottomRight,
-                MoveUp => MiddleMiddle,
-                MoveDown => TopMiddle,
-                MoveTo(_) => panic!(),
-            },
-            TopRight => match cmd {
-                MoveLeft => TopMiddle,
-                MoveRight => TopLeft,
-                MoveUp => BottomRight,
-                MoveDown => MiddleRight,
-                MoveTo(_) => panic!(),
-            },
-            MiddleRight => match cmd {
-                MoveLeft => MiddleMiddle,
-                MoveRight => MiddleLeft,
-                MoveUp => TopRight,
-                MoveDown => BottomRight,
-                MoveTo(_) => panic!(),
-            },
-            BottomRight => match cmd {
-                MoveLeft => BottomMiddle,
-                MoveRight => BottomLeft,
-                MoveUp => MiddleRight,
-                MoveDown => TopRight,
-                MoveTo(_) => panic!(),
-            },
-        }
-    }
-}
-
-impl std::fmt::Display for Position {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Position::*;
-
-        f.write_str(match self {
-            TopLeft => "T__",
-            MiddleLeft => "M__",
-            BottomLeft => "B__",
-            TopMiddle => "_T_",
-            MiddleMiddle => "_M_",
-            BottomMiddle => "_B_",
-            TopRight => "__T",
-            MiddleRight => "__M",
-            BottomRight => "__B",
-        })
-    }
 }
 
 impl Bar {
@@ -305,51 +162,20 @@ impl Bar {
                 Update::Volume(val) => self.volume = val,
                 Update::WindowName(val) => self.window_name = val,
                 Update::Nine(cmd) => {
-                    if let MoveTo(num) = cmd {
+                    if let NineCmd::MovedTo(num) = cmd {
                         self.nine = Position::from(num);
+                        writeln!(writer, "{},", self.to_json().unwrap()).unwrap();
+                        writer.flush().unwrap();
                         continue;
                     }
                     self.nine = self.nine.map_cmd(cmd);
-                    sway.run_command(format!("workspace number {}", self.nine.num()))
-                        .await
-                        .unwrap();
-
-                    /*
-                    let cur = self.nine.num();
-
-                    self.nine = Position::from(match val.unwrap() {
-                        10 => {
-                            if cur > 2 {
-                                cur - 3
-                            } else {
-                                cur + 6
-                            }
-                        }
-
-                        11 => {
-                            if cur < 6 {
-                                cur + 3
-                            } else {
-                                cur - 6
-                            }
-                        }
-                        12 => {
-                            if [0, 3, 6].contains(&cur) {
-                                cur + 2
-                            } else {
-                                cur - 1
-                            }
-                        }
-                        13 => {
-                            if [2, 5, 8].contains(&cur) {
-                                cur - 2
-                            } else {
-                                cur + 1
-                            }
-                        }
-                        _ => continue,
-                    });
-                    */
+                    sway.run_command(format!(
+                        "workspace {} {}",
+                        self.nine.num(),
+                        self.nine.name()
+                    ))
+                    .await
+                    .unwrap();
                 }
             }
         }

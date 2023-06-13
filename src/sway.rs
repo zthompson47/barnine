@@ -7,7 +7,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::StreamExt;
 //use tracing::error;
 
-use crate::bar::{NineCmd, Update};
+use crate::{bar::Update, nine::NineCmd};
 #[allow(unused_imports)]
 use crate::brightness::{
     brighten,
@@ -64,12 +64,14 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                         Some(Node {
                             nodes: ref _cur_nodes,
                             num: cur_num,
+                            name: _cur_name,
                             ..
                         }),
                     old:
                         Some(Node {
                             nodes: ref _old_nodes,
                             num: old_num,
+                            name: _old_name,
                             ..
                         }),
                     ..
@@ -77,7 +79,8 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                 {
                     if cur_num != old_num {
                         if let Some(num) = cur_num {
-                            tx.send(Update::Nine(NineCmd::MoveTo(num)))?;
+                            //log::info!("{num} {cur_name:?}");
+                            tx.send(Update::Nine(NineCmd::MovedTo(num)))?;
                         }
                     }
 
