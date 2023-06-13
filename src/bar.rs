@@ -137,6 +137,7 @@ pub struct Bar {
 
 impl Bar {
     pub fn new() -> Self {
+
         Self::default()
     }
 
@@ -146,6 +147,11 @@ impl Bar {
         mut rx_updates: mpsc::UnboundedReceiver<Update>,
     ) {
         let mut sway = swayipc_async::Connection::new().await.unwrap();
+
+        // Start on TopLeft workspace number (not zero)
+        sway.run_command(format!("workspace number {}", 2))
+            .await
+            .unwrap();
 
         while let Some(cmd) = rx_updates.recv().await {
             match cmd {
@@ -169,13 +175,14 @@ impl Bar {
                         continue;
                     }
                     self.nine = self.nine.map_cmd(cmd);
-                    sway.run_command(format!(
-                        "workspace {} {}",
-                        self.nine.num(),
-                        self.nine.name()
-                    ))
-                    .await
-                    .unwrap();
+                    //sway.run_command(format!(
+                    //    "workspace {} {}",
+                    //    self.nine.num(),
+                    //    self.nine.name()
+                    //))
+                    sway.run_command(format!("workspace number {}", self.nine.num()))
+                        .await
+                        .unwrap();
                 }
             }
         }

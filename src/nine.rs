@@ -39,13 +39,15 @@ use Position::*;
 
 impl From<i32> for Position {
     fn from(value: i32) -> Self {
-        let name = WORKSPACE_MAP.iter().find_map(|(num, pos)| {
-            if *num == value {
-                Some(pos)
-            } else {
-                None
-            }
-        });
+        let name = WORKSPACE_MAP.iter().find_map(
+            |(num, pos)| {
+                if *num == value {
+                    Some(pos)
+                } else {
+                    None
+                }
+            },
+        );
 
         if let Some(name) = name {
             *name
@@ -55,6 +57,7 @@ impl From<i32> for Position {
     }
 }
 
+/*
 impl From<String> for Position {
     fn from(value: String) -> Self {
         match value.as_str() {
@@ -71,16 +74,14 @@ impl From<String> for Position {
         }
     }
 }
+*/
 
 impl Position {
     pub fn num(&self) -> i32 {
-        let num = WORKSPACE_MAP.iter().find_map(|(num, pos)| {
-            if pos == self {
-                Some(num)
-            } else {
-                None
-            }
-        });
+        let num =
+            WORKSPACE_MAP
+                .iter()
+                .find_map(|(num, pos)| if pos == self { Some(num) } else { None });
 
         if let Some(num) = num {
             *num
@@ -89,6 +90,7 @@ impl Position {
         }
     }
 
+    /*
     pub fn name(&self) -> &'static str {
         match self {
             TopLeft => "TopLeft",
@@ -102,6 +104,7 @@ impl Position {
             BottomRight => "BottomRight",
         }
     }
+    */
 
     pub fn map_cmd(&self, cmd: NineCmd) -> Self {
         let grid = [
@@ -133,6 +136,7 @@ impl Position {
 
 impl std::fmt::Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // ⮰ ⭦
         f.write_str(match self {
             TopLeft => "T__",
             MiddleLeft => "M__",
