@@ -148,6 +148,7 @@ impl Bar {
         let mut sway = swayipc_async::Connection::new().await.unwrap();
 
         // Start on TopLeft workspace number (not zero)
+        #[cfg(not(test))]
         sway.run_command(format!("workspace number {}", 2))
             .await
             .unwrap();

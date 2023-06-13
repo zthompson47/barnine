@@ -1,15 +1,14 @@
 use std::env;
-use std::fmt::{Error, Write};
+use std::fmt::Error;
 use std::path::Path;
 
-use crossterm::style::Colorize;
+use owo_colors::OwoColorize;
 use tracing::subscriber::Subscriber;
 use tracing::{info, Event, Level};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling;
 use tracing_log::NormalizeEvent;
-use tracing_subscriber::fmt::time::{ChronoLocal, FormatTime};
-use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
+use tracing_subscriber::fmt::{format::Writer, FmtContext, FormatEvent, FormatFields};
 use tracing_subscriber::registry::LookupSpan;
 
 pub fn init_logging(app_name: &str) -> WorkerGuard {
@@ -73,13 +72,12 @@ where
     fn format_event(
         &self,
         ctx: &FmtContext<'_, S, N>,
-        writer: &mut dyn Write,
+        mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> Result<(), Error> {
         // Create timestamp
-        let time_format = "%b %d %I:%M:%S%.6f %p";
-        let mut time_now = String::new();
-        ChronoLocal::with_format(time_format.into()).format_time(&mut time_now)?;
+        let time_now = chrono::Local::now();
+        let time_now = time_now.format("%b %d %I:%M:%S%.6f %p").to_string();
 
         // Get line numbers from log crate events
         let normalized_meta = event.normalized_metadata();
@@ -88,14 +86,14 @@ where
         // Write formatted log record
         let message = format!(
             "{} {} {}{}{} ",
-            time_now.grey(),
+            time_now.truecolor(200, 200, 200),
             meta.level().to_string().blue(),
             meta.file().unwrap_or("").to_string().yellow(),
             String::from(":").yellow(),
             meta.line().unwrap_or(0).to_string().yellow(),
         );
         write!(writer, "{}", message).unwrap();
-        ctx.format_fields(writer, event)?;
+        ctx.format_fields(writer.by_ref(), event)?;
         writeln!(writer)
     }
 }
