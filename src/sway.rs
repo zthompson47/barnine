@@ -5,9 +5,10 @@ use swayipc_async::{
 use log::debug;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::StreamExt;
-use tracing::error;
+//use tracing::error;
 
-use crate::bar::Update;
+use crate::bar::{NineCmd, Update};
+#[allow(unused_imports)]
 use crate::brightness::{
     brighten,
     Brightness::Screen,
@@ -61,18 +62,26 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                     change: WorkspaceChange::Focus,
                     current:
                         Some(Node {
-                            nodes: ref cur_nodes,
+                            nodes: ref _cur_nodes,
+                            num: cur_num,
                             ..
                         }),
                     old:
                         Some(Node {
-                            nodes: ref old_nodes,
+                            nodes: ref _old_nodes,
+                            num: old_num,
                             ..
                         }),
                     ..
                 } = *workspace_event
                 {
-                    if contains_firefox(cur_nodes) {
+                    if cur_num != old_num {
+                        if let Some(num) = cur_num {
+                            tx.send(Update::Nine(NineCmd::MoveTo(num)))?;
+                        }
+                    }
+
+                    /*if contains_firefox(cur_nodes) {
                         if let Ok(new_val) = brighten(Screen(DownPct(22))).await {
                             tx.send(Update::Brightness(Some(new_val)))?;
                             tx.send(Update::Redraw)?;
@@ -86,7 +95,7 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
                         } else {
                             error!("Couldn't set firefox brightness with dbus");
                         }
-                    }
+                    }*/
                 }
             }
 
@@ -96,6 +105,7 @@ pub async fn watch_sway(tx: UnboundedSender<Update>) -> Res<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn contains_firefox(nodes: &[Node]) -> bool {
     for node in nodes {
         if let Node {
@@ -130,7 +140,7 @@ mod tests {
     #[should_panic]
     fn truncate_on_char_boundary() {
         let utf8_3_bytes = "ท";
-        let mut s = String::from(utf8_3_bytes.repeat(2));
+        let mut s = utf8_3_bytes.repeat(2);
         s.truncate(1);
     }
 
@@ -139,11 +149,11 @@ mod tests {
         let utf8_3_bytes = "ท";
         let test_str = utf8_3_bytes.repeat(MAX_WINDOW_NAME_LENGTH + 1);
         let mut display = Bar::default();
-        display.window_name = Some(String::from(test_str));
+        display.window_name = Some(test_str);
 
         // Force truncation on a char boundary
         let json = display.to_json().unwrap();
 
-        assert!(json.len() > 0);
+        assert!(!json.is_empty());
     }
 }

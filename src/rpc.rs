@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, trace};
 
 use crate::{
-    bar::Update,
+    bar::{NineCmd, Update},
     brightness::brighten,
     brightness::Brightness::{Keyboard, Screen},
     brightness::Delta::{DownPct, UpPct},
@@ -87,11 +87,29 @@ async fn handle_connection(mut stream: UnixStream, tx: mpsc::UnboundedSender<Upd
                     }
                 }
             }
-
             if let "toggle_mute" = msg {
                 toggle_mute().await.unwrap();
                 tx.send(Update::Mute(Some(get_mute().await.unwrap())))
                     .unwrap();
+                tx.send(Update::Redraw)?;
+            }
+
+            use NineCmd::*;
+
+            if let "move_left" = msg {
+                tx.send(Update::Nine(MoveLeft)).unwrap();
+                tx.send(Update::Redraw)?;
+            }
+            if let "move_right" = msg {
+                tx.send(Update::Nine(MoveRight)).unwrap();
+                tx.send(Update::Redraw)?;
+            }
+            if let "move_up" = msg {
+                tx.send(Update::Nine(MoveUp)).unwrap();
+                tx.send(Update::Redraw)?;
+            }
+            if let "move_down" = msg {
+                tx.send(Update::Nine(MoveDown)).unwrap();
                 tx.send(Update::Redraw)?;
             }
         }

@@ -34,9 +34,8 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
     // TODO create config dir and sample barnine.toml if absent
     debug!("in watch_config thread");
     let (tx_watcher, mut rx_watcher) = unbounded_channel::<()>();
-
-    let mut config: RecommendedWatcher = Watcher::new(move |e|
-
+    let mut config: RecommendedWatcher = Watcher::new(
+        move |e|
 
     //match e {
     if let Ok(event) = e {
@@ -53,12 +52,7 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
                 tx_watcher.send(()).unwrap();
             }
         }
-    }
-        //_ => {}
-
-
-
-
+    }, //_ => {}
     )
     .unwrap();
 
@@ -89,14 +83,11 @@ pub async fn watch_config(tx_updates: UnboundedSender<Update>) -> Res<()> {
 
 async fn send_config_update(app_name: &str, tx_updates: UnboundedSender<Update>) -> Res<()> {
     let config_file = get_config_file(app_name).unwrap();
+
     if config_file.is_file() {
         let toml: String = fs::read_to_string(&config_file).await.unwrap();
         let config: Result<Config, _> = toml::from_str(&toml);
-        /* TODO
-        if config.is_err() {
-            break;
-        }
-        */
+
         tx_updates
             .send(Update::Config(Box::new(config.unwrap())))
             .unwrap();
@@ -109,6 +100,7 @@ async fn send_config_update(app_name: &str, tx_updates: UnboundedSender<Update>)
 fn get_config_file(app_name: &str) -> Res<Box<Path>> {
     // Look for APPNAME_DEV_DIR environment variable to override default
     let mut dev_dir = app_name.to_uppercase();
+
     dev_dir.push_str("_DEV_DIR");
 
     let mut config_path = match env::var(&dev_dir) {
@@ -124,6 +116,7 @@ fn get_config_file(app_name: &str) -> Res<Box<Path>> {
             },
         },
     };
+
     config_path.set_extension("toml");
 
     Ok(config_path.into_boxed_path())
