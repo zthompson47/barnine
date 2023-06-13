@@ -10,6 +10,37 @@ const WORKSPACE_MAP: [(i32, Position); 9] = [
     (0, BottomRight),
 ];
 
+trait PositionNumMap {
+    fn position_to_num(&self, position: Position) -> i32;
+    fn num_to_position(&self, num: i32) -> Position;
+}
+
+impl PositionNumMap for [(i32, Position); 9] {
+    fn position_to_num(&self, position: Position) -> i32 {
+        let num = self
+            .iter()
+            .find_map(|(n, p)| if *p == position { Some(n) } else { None });
+
+        if let Some(num) = num {
+            *num
+        } else {
+            panic!()
+        }
+    }
+
+    fn num_to_position(&self, num: i32) -> Position {
+        let name = self
+            .iter()
+            .find_map(|(n, p)| if *n == num { Some(p) } else { None });
+
+        if let Some(name) = name {
+            *name
+        } else {
+            panic!()
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum NineCmd {
     MoveLeft,
@@ -18,8 +49,6 @@ pub enum NineCmd {
     MoveDown,
     MovedTo(i32),
 }
-
-use NineCmd::*;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub enum Position {
@@ -35,76 +64,19 @@ pub enum Position {
     BottomRight,
 }
 
+use NineCmd::*;
 use Position::*;
 
 impl From<i32> for Position {
     fn from(value: i32) -> Self {
-        let name = WORKSPACE_MAP.iter().find_map(
-            |(num, pos)| {
-                if *num == value {
-                    Some(pos)
-                } else {
-                    None
-                }
-            },
-        );
-
-        if let Some(name) = name {
-            *name
-        } else {
-            panic!()
-        }
+        WORKSPACE_MAP.num_to_position(value)
     }
 }
-
-/*
-impl From<String> for Position {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "TopLeft" => TopLeft,
-            "MiddleLeft" => MiddleLeft,
-            "BottomLeft" => BottomLeft,
-            "TopMiddle" => TopMiddle,
-            "MiddleMiddle" => MiddleMiddle,
-            "BottomMiddle" => BottomMiddle,
-            "TopRight" => TopRight,
-            "MiddleRight" => MiddleRight,
-            "BottomRight" => BottomRight,
-            _ => panic!(),
-        }
-    }
-}
-*/
 
 impl Position {
     pub fn num(&self) -> i32 {
-        let num =
-            WORKSPACE_MAP
-                .iter()
-                .find_map(|(num, pos)| if pos == self { Some(num) } else { None });
-
-        if let Some(num) = num {
-            *num
-        } else {
-            panic!()
-        }
+        WORKSPACE_MAP.position_to_num(*self)
     }
-
-    /*
-    pub fn name(&self) -> &'static str {
-        match self {
-            TopLeft => "TopLeft",
-            MiddleLeft => "MiddleLeft",
-            BottomLeft => "BottomLeft",
-            TopMiddle => "TopMiddle",
-            MiddleMiddle => "MiddleMiddle",
-            BottomMiddle => "BottomMiddle",
-            TopRight => "TopRight",
-            MiddleRight => "MiddleRight",
-            BottomRight => "BottomRight",
-        }
-    }
-    */
 
     pub fn map_cmd(&self, cmd: NineCmd) -> Self {
         let grid = [

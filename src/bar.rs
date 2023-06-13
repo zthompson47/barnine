@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     config::Config,
-    err::Res,
+    err::Res as Result,
     nine::{NineCmd, Position},
 };
 
@@ -137,7 +137,6 @@ pub struct Bar {
 
 impl Bar {
     pub fn new() -> Self {
-
         Self::default()
     }
 
@@ -188,7 +187,7 @@ impl Bar {
         }
     }
 
-    pub fn to_json(&mut self) -> Res<String> {
+    pub fn to_json(&mut self) -> Result<String> {
         let mut result = Vec::<String>::new();
 
         for i in 0..self.config.bar.len() {
